@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Depth Rush</title>
+<style>
+  :root {
+    --accent: #35d6c4;
+    --warn: #f5a24a;
+    --danger: #ff5a5a;
+    --ink: #e7f3f1;
+    --mono: 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #05121a; color: var(--ink); font-family: var(--mono); }
+  body { touch-action: none; user-select: none; }
+
+  #stage { position: fixed; inset: 0; }
+  #game { width: 100%; height: 100%; display: block; }
+
+  #hud { position: fixed; inset: 0; pointer-events: none; padding: max(12px, env(safe-area-inset-top)) 12px 12px; }
+  .label { font-size: 10px; letter-spacing: 0.12em; opacity: 0.65; margin-bottom: 4px; }
+  .value { font-size: 18px; font-variant-numeric: tabular-nums; }
+
+  #hud-o2 { position: absolute; top: 14px; left: 12px; }
+  #o2-track { width: 14px; height: 110px; border: 1px solid rgba(255,255,255,0.45); border-radius: 5px; display: flex; align-items: flex-end; overflow: hidden; }
+  #o2-fill { width: 100%; height: 100%; background: var(--accent); transition: height 0.1s linear; }
+  #hud-o2[data-level="amber"] #o2-fill { background: var(--warn); }
+  #hud-o2[data-level="red"] #o2-fill { background: var(--danger); animation: pulse 0.6s infinite; }
+
+  #hud-timer { position: absolute; top: 14px; right: 12px; text-align: right; }
+  #hud-timer[data-late="true"] .value { color: var(--warn); animation: pulse 1s infinite; }
+  #hud-score { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); text-align: center; }
+  #hud-carry { position: absolute; top: 62px; left: 50%; transform: translateX(-50%); text-align: center; font-size: 11px; opacity: 0.8; }
+
+  #hud-sonar { position: absolute; bottom: 20px; left: 14px; text-align: center; }
+  #sonar-dial { width: 52px; height: 52px; border-radius: 50%; border: 1px solid rgba(255,255,255,0.4); position: relative; overflow: hidden; margin-bottom: 4px; }
+  #sonar-sweep { position: absolute; top: 0; left: 50%; width: 1px; height: 50%; background: linear-gradient(var(--accent), transparent); transform-origin: bottom center; animation: sweep 2s linear infinite; }
+  #sonar-tick { position: absolute; top: 4px; left: 50%; width: 3px; height: 10px; margin-left: -1.5px; background: var(--accent); transform-origin: 50% 22px; border-radius: 2px; }
+  @keyframes sweep { to { transform: rotate(360deg); } }
+  @keyframes pulse { 50% { opacity: 0.35; } }
+
+  #boost-btn {
+    pointer-events: auto; position: absolute; bottom: 20px; right: 14px;
+    width: 78px; height: 78px; border-radius: 50%; border: 1px solid rgba(53,214,196,0.6);
+    background: rgba(53,214,196,0.22); color: #fff; font-family: var(--mono);
+    font-size: 11px; letter-spacing: 0.1em; touch-action: none;
+  }
+  #boost-btn[data-state="active"] { background: rgba(53,214,196,0.75); }
+  #boost-btn[data-state="cooling"] { opacity: 0.35; }
+
+  #drill-ring {
+    position: absolute; bottom: 110px; left: 50%; transform: translateX(-50%);
+    width: 120px; height: 6px; border: 1px solid rgba(255,255,255,0.4); border-radius: 4px; opacity: 0;
+    transition: opacity 0.12s;
+  }
+  #drill-ring[data-on="true"] { opacity: 1; }
+  #drill-ring::after { content: ""; display: block; height: 100%; width: var(--fill, 0%); background: var(--accent); }
+
+  #shark-warning {
+    position: absolute; inset: 0; border: 3px solid var(--danger); opacity: 0;
+    transition: opacity 0.15s;
+  }
+  #shark-warning[data-on="true"] { opacity: 1; animation: pulse 0.5s infinite; }
+
+  #overlay {
+    position: fixed; inset: 0; display: none; place-items: center;
+    background: rgba(5,18,26,0.92); padding: 24px; text-align: center;
+  }
+  #overlay[data-open="true"] { display: grid; }
+  #overlay h1 { font-size: 28px; letter-spacing: 0.14em; margin: 0 0 6px; }
+  #overlay-reason { opacity: 0.7; font-size: 13px; margin-bottom: 20px; }
+  #overlay-breakdown { list-style: none; padding: 0; margin: 0 auto 16px; max-width: 320px; font-size: 12px; }
+  #overlay-breakdown li { display: grid; grid-template-columns: 1fr auto auto; gap: 10px; padding: 7px 0; border-bottom: 1px dashed rgba(255,255,255,0.15); text-align: left; }
+  #overlay-breakdown em { opacity: 0.5; font-style: normal; }
+  #overlay-breakdown b { font-variant-numeric: tabular-nums; }
+  #overlay-breakdown .total { border-bottom: none; font-size: 15px; color: var(--accent); padding-top: 12px; }
+  #overlay-best { font-size: 12px; opacity: 0.7; margin-bottom: 20px; }
+  #retry-btn {
+    font-family: var(--mono); font-size: 13px; letter-spacing: 0.14em; color: #05121a;
+    background: var(--accent); border: none; border-radius: 999px; padding: 14px 34px;
+  }
+</style>
+</head>
+<body>
+  <div id="stage"><canvas id="game"></canvas></div>
+
+  <div id="hud">
+    <div id="hud-o2" data-level="ok">
+      <div class="label">O2</div>
+      <div id="o2-track"><div id="o2-fill"></div></div>
+    </div>
+
+    <div id="hud-score">
+      <div class="label">SCORE</div>
+      <div class="value" id="score-value">0</div>
+    </div>
+    <div id="hud-carry">CARRYING <span id="parts-value">0</span> · <span id="depth-value">0M</span></div>
+
+    <div id="hud-timer" data-late="false">
+      <div class="label">STORM</div>
+      <div class="value" id="timer-value">5:00</div>
+    </div>
+
+    <div id="hud-sonar">
+      <div id="sonar-dial"><div id="sonar-sweep"></div><div id="sonar-tick"></div></div>
+      <div class="label">SONAR</div>
+    </div>
+
+    <button id="boost-btn" data-state="ready">BOOST</button>
+    <div id="drill-ring" data-on="false"></div>
+    <div id="shark-warning" data-on="false"></div>
+  </div>
+
+  <div id="overlay" data-open="false">
+    <div>
+      <h1 id="overlay-title">RUN OVER</h1>
+      <div id="overlay-reason"></div>
+      <ul id="overlay-breakdown"></ul>
+      <div id="overlay-best"></div>
+      <button id="retry-btn">DIVE AGAIN</button>
+    </div>
+  </div>
+
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>
