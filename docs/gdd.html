@@ -1,0 +1,651 @@
+<title>Depth Rush</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;700;800&family=Source+Serif+4:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #eef4f3;
+    --bg-raised: #ffffff;
+    --bg-sunken: #e2ece9;
+    --text: #10201f;
+    --text-muted: #4d6461;
+    --border: #c7d8d4;
+    --accent: #0f7f7a;
+    --accent-rgb: 15,127,122;
+    --accent-strong: #0b5f5c;
+    --accent-soft: #d7ece9;
+    --warning: #b5540c;
+    --warning-soft: #fbe6d3;
+    --depth: #1c3548;
+    --depth-rgb: 28,53,72;
+
+    --font-display: 'Big Shoulders Display', 'Oswald', 'Arial Narrow', sans-serif;
+    --font-body: 'Source Serif 4', Georgia, 'Times New Roman', serif;
+    --font-mono: 'JetBrains Mono', 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0a1516;
+      --bg-raised: #101f1f;
+      --bg-sunken: #0d1a1a;
+      --text: #e7f3f1;
+      --text-muted: #93aeac;
+      --border: #1e3634;
+      --accent: #35d6c4;
+      --accent-rgb: 53,214,196;
+      --accent-strong: #7be9dd;
+      --accent-soft: #12302d;
+      --warning: #f5a24a;
+      --warning-soft: #2e1d0c;
+      --depth: #7fb4c9;
+      --depth-rgb: 127,180,201;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --bg: #0a1516;
+    --bg-raised: #101f1f;
+    --bg-sunken: #0d1a1a;
+    --text: #e7f3f1;
+    --text-muted: #93aeac;
+    --border: #1e3634;
+    --accent: #35d6c4;
+    --accent-rgb: 53,214,196;
+    --accent-strong: #7be9dd;
+    --accent-soft: #12302d;
+    --warning: #f5a24a;
+    --warning-soft: #2e1d0c;
+    --depth: #7fb4c9;
+    --depth-rgb: 127,180,201;
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    *, *::before, *::after {
+      animation-duration: 0.001ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.001ms !important;
+    }
+  }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-body);
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  a { color: inherit; }
+  a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+  h1, h2, h3 { font-family: var(--font-display); text-transform: uppercase; text-wrap: balance; margin: 0; }
+  p { margin: 0 0 1rem; max-width: 62ch; }
+  p:last-child { margin-bottom: 0; }
+
+  .container { max-width: 1180px; margin: 0 auto; padding: 0 1.5rem; }
+
+  /* ---------- HERO ---------- */
+  .hero { position: relative; overflow: hidden; padding: 4rem 0 3rem; border-bottom: 1px solid var(--border); }
+  .hero::before {
+    content: "";
+    position: absolute;
+    top: -160px; right: -160px;
+    width: 560px; height: 560px;
+    border-radius: 50%;
+    background: repeating-radial-gradient(circle at center,
+      rgba(var(--accent-rgb),0.16) 0, rgba(var(--accent-rgb),0.16) 1px,
+      transparent 1px, transparent 28px);
+    pointer-events: none;
+  }
+  .hero-inner { position: relative; }
+  .eyebrow {
+    font-family: var(--font-mono); font-size: 0.75rem; letter-spacing: 0.14em;
+    text-transform: uppercase; color: var(--accent-strong); margin-bottom: 1rem;
+  }
+  .hero h1 {
+    font-size: clamp(3rem, 9vw, 5.5rem); font-weight: 800; line-height: 0.92;
+    letter-spacing: -0.01em; color: var(--depth);
+  }
+  :root:not([data-theme="light"]) .hero h1 { color: var(--text); }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .hero h1 { color: var(--text); } }
+  .genre-badge {
+    display: inline-block; margin-top: 1rem; padding: 0.4rem 0.9rem;
+    border: 1px solid var(--accent); border-radius: 999px;
+    font-family: var(--font-mono); font-size: 0.7rem; letter-spacing: 0.1em;
+    text-transform: uppercase; color: var(--accent-strong);
+  }
+  .tagline {
+    font-size: 1.2rem; font-style: italic; color: var(--text-muted);
+    margin-top: 1.5rem; max-width: 46ch;
+  }
+  .spec-plate { display: flex; flex-wrap: wrap; gap: 0.6rem; margin-top: 2rem; }
+  .spec-plate span {
+    font-family: var(--font-mono); font-size: 0.68rem; letter-spacing: 0.06em;
+    text-transform: uppercase; color: var(--text-muted);
+    border: 1px solid var(--border); border-radius: 6px; padding: 0.4rem 0.65rem;
+    background: var(--bg-raised);
+  }
+
+  /* ---------- TOC ---------- */
+  .toc {
+    border-bottom: 1px solid var(--border); background: var(--bg);
+    position: sticky; top: 0; z-index: 5;
+  }
+  .toc ul {
+    display: flex; gap: 1.4rem; overflow-x: auto; list-style: none;
+    margin: 0; padding: 0.85rem 1.5rem;
+  }
+  .toc a {
+    font-family: var(--font-mono); font-size: 0.72rem; letter-spacing: 0.08em;
+    text-transform: uppercase; color: var(--text-muted); text-decoration: none; white-space: nowrap;
+  }
+  .toc a:hover, .toc a:focus-visible { color: var(--accent); }
+
+  .layout { padding-top: 3rem; padding-bottom: 2rem; }
+
+  @media (min-width: 900px) {
+    .layout { display: grid; grid-template-columns: 200px 1fr; gap: 3rem; align-items: start; }
+    .toc { position: sticky; top: 2rem; border-bottom: none; background: transparent; align-self: start; }
+    .toc ul { flex-direction: column; overflow-x: visible; padding: 0; gap: 0.65rem; }
+  }
+
+  /* ---------- SECTIONS ---------- */
+  section { scroll-margin-top: 5.5rem; margin-bottom: 4.5rem; }
+  section:last-child { margin-bottom: 0; }
+  .section-eyebrow {
+    display: flex; align-items: baseline; gap: 0.5rem;
+    font-family: var(--font-mono); font-size: 0.75rem; letter-spacing: 0.1em;
+    color: var(--accent-strong); margin-bottom: 0.6rem;
+  }
+  .section-eyebrow .of { color: var(--text-muted); }
+  section h2 { font-size: clamp(1.6rem, 4vw, 2.2rem); font-weight: 700; color: var(--depth); margin-bottom: 0.5rem; }
+  :root:not([data-theme="light"]) section h2 { color: var(--text); }
+  .dek { color: var(--text-muted); font-size: 1.02rem; margin-bottom: 2rem; max-width: 60ch; }
+
+  .card {
+    background: var(--bg-raised); border: 1px solid var(--border); border-radius: 12px; padding: 1.5rem;
+  }
+
+  /* ---------- TITLE GRID ---------- */
+  .title-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.1rem; margin-top: 1.5rem; }
+  @media (max-width: 700px) { .title-grid { grid-template-columns: 1fr; } }
+  .title-card h3 {
+    font-family: var(--font-mono); font-size: 0.85rem; letter-spacing: 0.04em; font-weight: 600;
+    text-transform: none; color: var(--text); margin-bottom: 0.5rem;
+  }
+  .title-card p { font-size: 0.92rem; color: var(--text-muted); margin: 0; }
+  .recommend-note {
+    margin-top: 1.25rem; padding: 1rem 1.25rem; border-left: 3px solid var(--accent);
+    background: var(--accent-soft); border-radius: 0 8px 8px 0; font-size: 0.95rem;
+  }
+
+  /* ---------- PLAYER / PITCH ---------- */
+  .pitch-row { display: flex; gap: 2rem; flex-wrap: wrap; align-items: stretch; }
+  .player-card { flex: 1 1 260px; }
+  .player-card ul { margin: 0; padding: 0; list-style: none; }
+  .player-card li {
+    display: flex; justify-content: space-between; gap: 1rem;
+    padding: 0.55rem 0; border-bottom: 1px dashed var(--border); font-size: 0.92rem;
+  }
+  .player-card li:last-child { border-bottom: none; }
+  .player-card li span:first-child { font-family: var(--font-mono); font-size: 0.68rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-muted); }
+  .pitch-quote {
+    flex: 1 1 380px; border-left: 3px solid var(--accent); padding: 0.25rem 0 0.25rem 1.5rem;
+    font-size: 1.15rem; font-style: italic; color: var(--text); display: flex; align-items: center;
+  }
+
+  /* ---------- CONTROLS ---------- */
+  .controls-layout { display: grid; grid-template-columns: 1fr; gap: 2.5rem; }
+  @media (min-width: 800px) { .controls-layout { grid-template-columns: 1.1fr 0.9fr; } }
+  .control-list { display: flex; flex-direction: column; gap: 1rem; }
+  .control-item { display: grid; grid-template-columns: 100px 1fr; gap: 1rem; padding: 1rem 0; border-bottom: 1px solid var(--border); }
+  .control-item:last-child { border-bottom: none; }
+  .control-key {
+    font-family: var(--font-mono); font-size: 0.78rem; font-weight: 600; letter-spacing: 0.05em;
+    color: var(--accent-strong); align-self: start;
+  }
+  .control-item p { font-size: 0.94rem; margin: 0; }
+  .hud-list { margin-top: 1.75rem; display: flex; flex-direction: column; gap: 0.9rem; }
+  .hud-list .control-item { grid-template-columns: 100px 1fr; }
+
+  .phone-mock-wrap { display: flex; flex-direction: column; align-items: center; gap: 1rem; }
+  .phone-frame {
+    position: relative; width: 100%; max-width: 260px; aspect-ratio: 9 / 19.5;
+    border-radius: 26px; border: 2px solid var(--border);
+    background: linear-gradient(180deg, rgba(var(--depth-rgb),0.35) 0%, var(--depth) 100%);
+    overflow: hidden; box-shadow: 0 12px 32px rgba(var(--depth-rgb),0.18);
+  }
+  .hud { position: absolute; }
+  .hud-label {
+    display: block; font-family: var(--font-mono); font-size: 0.55rem; letter-spacing: 0.08em;
+    color: rgba(255,255,255,0.7); margin-bottom: 0.3rem;
+  }
+  .hud-value {
+    font-family: var(--font-mono); font-size: 0.95rem; color: #fff; font-variant-numeric: tabular-nums;
+  }
+  .hud-o2 { top: 14px; left: 12px; }
+  .o2-bar { width: 10px; height: 84px; border: 1px solid rgba(255,255,255,0.5); border-radius: 4px; overflow: hidden; display: flex; align-items: flex-end; }
+  .o2-fill { width: 100%; height: 58%; background: var(--accent); }
+  .hud-timer { top: 14px; right: 12px; text-align: right; }
+  .hud-timer .hud-value { color: var(--warning); }
+  .hud-score { top: 14px; left: 50%; transform: translateX(-50%); text-align: center; }
+  .hud-sonar { bottom: 16px; left: 12px; text-align: center; }
+  .sonar-dial {
+    width: 42px; height: 42px; border-radius: 50%; border: 1px solid rgba(255,255,255,0.5);
+    position: relative; margin-bottom: 0.3rem; overflow: hidden;
+  }
+  .sonar-sweep {
+    position: absolute; top: 0; left: 50%; width: 1px; height: 50%;
+    background: linear-gradient(rgba(var(--accent-rgb),0.9), transparent);
+    transform-origin: bottom center; animation: sweep 3.4s linear infinite;
+  }
+  @keyframes sweep { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+  .hud-boost { bottom: 16px; right: 12px; }
+  .boost-btn {
+    font-family: var(--font-mono); font-size: 0.62rem; letter-spacing: 0.06em; font-weight: 600;
+    color: #fff; background: rgba(var(--accent-rgb),0.85); border: none; border-radius: 999px;
+    padding: 0.55rem 0.85rem; cursor: default;
+  }
+  .diver-dot {
+    position: absolute; width: 10px; height: 10px; border-radius: 50%;
+    background: #fff; box-shadow: 0 0 0 6px rgba(255,255,255,0.15);
+    bottom: 40%; left: 44%;
+  }
+  .phone-caption { font-size: 0.82rem; color: var(--text-muted); text-align: center; max-width: 30ch; margin: 0; }
+
+  /* ---------- CORE LOOP ---------- */
+  .loop-steps { display: flex; flex-direction: column; margin-top: 1rem; }
+  .loop-step { display: grid; grid-template-columns: 64px 24px 1fr; column-gap: 1rem; padding-bottom: 1.9rem; }
+  .loop-step:last-of-type { padding-bottom: 0; }
+  .loop-depth {
+    font-family: var(--font-mono); font-size: 0.72rem; color: var(--text-muted);
+    text-align: right; padding-top: 0.15rem; font-variant-numeric: tabular-nums;
+  }
+  .loop-marker { position: relative; display: flex; justify-content: center; }
+  .loop-marker .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); z-index: 1; margin-top: 3px; }
+  .loop-marker .line { position: absolute; top: 12px; bottom: -30px; width: 2px; background: var(--border); left: 50%; transform: translateX(-50%); }
+  .loop-step:last-of-type .loop-marker .line { display: none; }
+  .loop-content h3 {
+    font-family: var(--font-mono); font-size: 0.85rem; letter-spacing: 0.04em; text-transform: uppercase;
+    color: var(--accent-strong); font-weight: 600; margin-bottom: 0.35rem;
+  }
+  .loop-content p { font-size: 0.94rem; margin: 0; }
+  .loop-return {
+    margin-top: 0.5rem; margin-left: 88px; padding: 0.9rem 1.1rem; border: 1px dashed var(--accent);
+    border-radius: 8px; font-family: var(--font-mono); font-size: 0.78rem; color: var(--accent-strong);
+    letter-spacing: 0.02em;
+  }
+  @media (max-width: 520px) { .loop-return { margin-left: 0; } }
+  .fail-note { margin-top: 1.75rem; padding: 1.1rem 1.25rem; background: var(--warning-soft); border-radius: 8px; }
+  .fail-note strong { color: var(--warning); font-family: var(--font-mono); font-size: 0.78rem; letter-spacing: 0.06em; text-transform: uppercase; display: block; margin-bottom: 0.4rem; }
+  .fail-note p { margin: 0; font-size: 0.92rem; }
+
+  /* ---------- SCOPE ---------- */
+  .scope-intro { margin-bottom: 1.75rem; }
+  .scope-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.75rem; }
+  @media (max-width: 720px) { .scope-grid { grid-template-columns: 1fr; } }
+  .scope-col h3 {
+    font-family: var(--font-mono); font-size: 0.78rem; letter-spacing: 0.08em; text-transform: uppercase;
+    margin-bottom: 1rem; color: var(--text);
+  }
+  .scope-col.in h3 { color: var(--accent-strong); }
+  .scope-col.out h3 { color: var(--text-muted); }
+  .scope-col ul { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 0.65rem; }
+  .scope-col li { display: flex; gap: 0.6rem; font-size: 0.92rem; }
+  .scope-col.in li::before { content: "\2713"; color: var(--accent); font-weight: 600; flex-shrink: 0; }
+  .scope-col.out li::before { content: "\2192"; color: var(--text-muted); flex-shrink: 0; }
+
+  /* ---------- PROGRESSION ---------- */
+  .twist-grid { display: grid; grid-template-columns: 1fr; gap: 1.1rem; margin-top: 1rem; }
+  @media (min-width: 700px) { .twist-grid { grid-template-columns: 1fr 1fr; } }
+  .twist-card h3 {
+    font-family: var(--font-mono); font-size: 0.8rem; letter-spacing: 0.03em; text-transform: none;
+    color: var(--accent-strong); margin-bottom: 0.6rem; font-weight: 600;
+  }
+  .twist-card p { font-size: 0.94rem; margin: 0; }
+  .formula-card {
+    margin-top: 1.75rem; background: var(--bg-sunken); border: 1px solid var(--border); border-radius: 10px;
+    padding: 1.25rem 1.5rem; overflow-x: auto;
+  }
+  .formula-label { font-family: var(--font-mono); font-size: 0.68rem; letter-spacing: 0.1em; color: var(--text-muted); text-transform: uppercase; margin-bottom: 0.6rem; }
+  .formula {
+    font-family: var(--font-mono); font-size: 0.98rem; color: var(--text); white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+  }
+  .formula .op { color: var(--accent-strong); }
+
+  /* ---------- FUTURE ---------- */
+  .future-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 1.25rem; margin-top: 1rem; }
+  .future-card h3 {
+    font-family: var(--font-mono); font-size: 0.72rem; letter-spacing: 0.09em; text-transform: uppercase;
+    color: var(--accent-strong); margin-bottom: 0.75rem; font-weight: 600;
+  }
+  .future-card ul { margin: 0; padding-left: 1.1rem; display: flex; flex-direction: column; gap: 0.4rem; }
+  .future-card li { font-size: 0.9rem; }
+
+  footer { border-top: 1px solid var(--border); padding: 2rem 0 3rem; }
+  footer p { font-size: 0.85rem; color: var(--text-muted); margin: 0; max-width: none; }
+</style>
+
+<div class="hero">
+  <div class="container hero-inner">
+    <div class="eyebrow">Game Design Document — Prototype Build</div>
+    <h1>Depth Rush</h1>
+    <div class="genre-badge">Survival / Resource Management · Arcade Score-Attack</div>
+    <p class="tagline">Five minutes. One tank. A ship in pieces at the bottom of the sea.</p>
+    <div class="spec-plate">
+      <span>Platform · Mobile (Portrait)</span>
+      <span>Engine · HTML5 + Three.js</span>
+      <span>Build · Playable Prototype</span>
+      <span>Timeline · 10 Days</span>
+    </div>
+  </div>
+</div>
+
+<nav class="toc" aria-label="Sections">
+  <ul>
+    <li><a href="#title-genre">01 Title &amp; Genre</a></li>
+    <li><a href="#pitch">02 Player &amp; Pitch</a></li>
+    <li><a href="#controls">03 How to Play</a></li>
+    <li><a href="#core-loop">04 Core Loop</a></li>
+    <li><a href="#scope">05 Prototype Scope</a></li>
+    <li><a href="#progression">06 Progression &amp; Twist</a></li>
+    <li><a href="#future">07 Future Vision</a></li>
+  </ul>
+</nav>
+
+<div class="container layout">
+  <div></div>
+  <main class="content">
+
+    <section id="title-genre">
+      <div class="section-eyebrow"><span>01</span><span class="of">/ 07</span></div>
+      <h2>Game Title &amp; Genre</h2>
+      <p class="dek">Working title, genre framing, and the alternates considered along the way.</p>
+
+      <p><strong>Genre:</strong> Survival &amp; Resource-Management, played as an arcade score-attack — single-session runs of a few minutes each, built for mobile portrait, one-thumb play.</p>
+
+      <div class="title-grid">
+        <div class="title-card card">
+          <h3>Salvage Storm</h3>
+          <p>Leans into the repair-race framing over the diving itself — reads more like a management sim than an arcade sprint.</p>
+        </div>
+        <div class="title-card card">
+          <h3>Undertow</h3>
+          <p>Moodier, single-word, focuses on the threat and the current rather than the run-and-collect loop.</p>
+        </div>
+        <div class="title-card card">
+          <h3>Riptide Run</h3>
+          <p>Closest in sound to the endless-runner comps (Subway Surfers, Temple Run) — strong genre signal, less specific to diving.</p>
+        </div>
+      </div>
+      <div class="recommend-note">
+        <strong style="font-family: var(--font-mono); font-size:0.78rem; letter-spacing:0.06em; text-transform:uppercase; color: var(--accent-strong);">Recommendation</strong>
+        <p style="margin-top:0.4rem;">Keep <strong>Depth Rush</strong>. It reads instantly as fast + underwater, works as a two-word app icon label, and doesn't overpromise story depth the prototype isn't building.</p>
+      </div>
+    </section>
+
+    <section id="pitch">
+      <div class="section-eyebrow"><span>02</span><span class="of">/ 07</span></div>
+      <h2>Target Player &amp; Pitch</h2>
+      <p class="dek">Who this is for, and the one paragraph that sells it.</p>
+
+      <div class="pitch-row">
+        <div class="player-card card">
+          <ul>
+            <li><span>Audience</span> <span>Subway Surfers / Temple Run / Alto's Odyssey players</span></li>
+            <li><span>Also appeals to</span> <span>Resource-tension fans (Don't Starve-lite)</span></li>
+            <li><span>Session</span> <span>90 sec – 5 min, one run</span></li>
+            <li><span>Controls</span> <span>One thumb, portrait only</span></li>
+            <li><span>Age</span> <span>10+, no reading-heavy onboarding</span></li>
+            <li><span>Context</span> <span>Commute, queue, break — phone in one hand</span></li>
+          </ul>
+        </div>
+        <p class="pitch-quote">"Depth Rush is a one-thumb underwater survival sprint. Your ship is wrecked, its parts scattered across the seabed, and a storm is five minutes from making landfall. Dive, scavenge gear and salvage, dodge sharks, and race the clock back to the ship — every second underwater is a bet against your oxygen. The seabed reshuffles every run, so the only way to beat your last score is to dive again."</p>
+      </div>
+    </section>
+
+    <section id="controls">
+      <div class="section-eyebrow"><span>03</span><span class="of">/ 07</span></div>
+      <h2>How to Play</h2>
+      <p class="dek">Three touch inputs, four HUD readouts. Nothing that needs a tutorial longer than one dive.</p>
+
+      <div class="controls-layout">
+        <div>
+          <div class="control-list">
+            <div class="control-item">
+              <div class="control-key">TAP</div>
+              <p>Swim toward the tapped point. Tapping while touching a floating part, pickup, or the ship auto-triggers collect / return — no separate button.</p>
+            </div>
+            <div class="control-item">
+              <div class="control-key">HOLD</div>
+              <p>On a drillable rock or sea mount, drills the surface open. A fill-ring tracks progress at the touch point; releasing early cancels. O2 drains at 2× while drilling.</p>
+            </div>
+            <div class="control-item">
+              <div class="control-key">BOOST<br>(UI button)</div>
+              <p>Bottom-right thumb zone. Burns a burst of fin speed to break away from a shark. O2 drains at 3× while active, with a short cooldown after release.</p>
+            </div>
+          </div>
+
+          <div class="hud-list">
+            <div class="control-item">
+              <div class="control-key">O2 GAUGE</div>
+              <p>Top-left vertical bar. Drains continuously; shifts green → amber under 40% → pulsing red under 15%.</p>
+            </div>
+            <div class="control-item">
+              <div class="control-key">STORM TIMER</div>
+              <p>Top-right, counts down from 5:00. Inside the last 60 seconds it pulses and the water visibly darkens.</p>
+            </div>
+            <div class="control-item">
+              <div class="control-key">SONAR PING</div>
+              <p>Bottom-left dial. Sweeps faster and brighter the closer the diver is to an undiscovered part, with a bearing tick toward it.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="phone-mock-wrap">
+          <div class="phone-frame">
+            <div class="hud hud-o2">
+              <span class="hud-label">O2</span>
+              <div class="o2-bar"><div class="o2-fill"></div></div>
+            </div>
+            <div class="hud hud-timer">
+              <span class="hud-label">STORM</span>
+              <span class="hud-value">04:47</span>
+            </div>
+            <div class="hud hud-score">
+              <span class="hud-label">SCORE</span>
+              <span class="hud-value">1,240</span>
+            </div>
+            <div class="hud hud-sonar">
+              <div class="sonar-dial"><div class="sonar-sweep"></div></div>
+              <span class="hud-label">SONAR</span>
+            </div>
+            <div class="hud hud-boost">
+              <button class="boost-btn" type="button">BOOST</button>
+            </div>
+            <div class="diver-dot"></div>
+          </div>
+          <p class="phone-caption">HUD layout — portrait, one-thumb reach for TAP anywhere plus BOOST in the bottom-right thumb zone.</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="core-loop">
+      <div class="section-eyebrow"><span>04</span><span class="of">/ 07</span></div>
+      <h2>Core Loop</h2>
+      <p class="dek">One dive, start to finish — the loop that has to feel good before anything else gets built.</p>
+
+      <div class="loop-steps">
+        <div class="loop-step">
+          <div class="loop-depth">0M</div>
+          <div class="loop-marker"><div class="dot"></div><div class="line"></div></div>
+          <div class="loop-content"><h3>Surface</h3><p>Ship deploys the diver. Storm timer starts at 5:00, O2 tank fills to 100%.</p></div>
+        </div>
+        <div class="loop-step">
+          <div class="loop-depth">−5 to −15M</div>
+          <div class="loop-marker"><div class="dot"></div><div class="line"></div></div>
+          <div class="loop-content"><h3>Descend</h3><p>Tap-swim toward sonar bearings; visibility narrows as the seabed approaches.</p></div>
+        </div>
+        <div class="loop-step">
+          <div class="loop-depth">−15M</div>
+          <div class="loop-marker"><div class="dot"></div><div class="line"></div></div>
+          <div class="loop-content"><h3>Seabed</h3><p>Reach rock and sea-mount clusters; hold to drill them open. O2 drains faster the whole time.</p></div>
+        </div>
+        <div class="loop-step">
+          <div class="loop-depth">−15M</div>
+          <div class="loop-marker"><div class="dot"></div><div class="line"></div></div>
+          <div class="loop-content"><h3>Scavenge</h3><p>Grab floodlights (light up dark pockets), spare O2 tanks (refill the gauge), fins (permanent speed boost for the run), and the ship parts sonar is guiding you toward.</p></div>
+        </div>
+        <div class="loop-step">
+          <div class="loop-depth">−15M</div>
+          <div class="loop-marker"><div class="dot"></div><div class="line"></div></div>
+          <div class="loop-content"><h3>Evade</h3><p>Sharks patrol fixed lanes. Enter a danger radius and a warning pulse starts; hold BOOST to break away at the cost of O2.</p></div>
+        </div>
+        <div class="loop-step">
+          <div class="loop-depth">−8M</div>
+          <div class="loop-marker"><div class="dot"></div><div class="line"></div></div>
+          <div class="loop-content"><h3>Ascend</h3><p>Carrying at least one part, tap-swim back toward the surface and the ship — more parts in hand, higher the payoff, higher the risk of staying down.</p></div>
+        </div>
+        <div class="loop-step">
+          <div class="loop-depth">0M</div>
+          <div class="loop-marker"><div class="dot"></div></div>
+          <div class="loop-content"><h3>Auto-Repair &amp; Score</h3><p>Reaching the ship with parts in hand triggers repair automatically. Parts, O2 remaining, time remaining, and risk bonus tally into a score.</p></div>
+        </div>
+      </div>
+      <div class="loop-return">&#8635; RUN ENDS → SEABED RESHUFFLES → DIVE AGAIN</div>
+
+      <div class="fail-note">
+        <strong>Fail State</strong>
+        <p>O2 hits zero, a shark catches you, or the storm timer hits 0:00 — any of the three ends the run immediately at the same unified Game Over screen, showing the score breakdown, then Retry.</p>
+      </div>
+    </section>
+
+    <section id="scope">
+      <div class="section-eyebrow"><span>05</span><span class="of">/ 07</span></div>
+      <h2>What's in This Prototype</h2>
+      <p class="dek scope-intro">10 days, one build target: prove the full loop feels good — not ship a finished game. Every system below is in, at simplified fidelity: one seabed, minimal animation, placeholder-grade art and audio throughout.</p>
+
+      <div class="scope-grid">
+        <div class="scope-col in">
+          <h3>In the Prototype</h3>
+          <ul>
+            <li>One seabed scene (rocky reef + shipwreck silhouette), Three.js, portrait camera</li>
+            <li>Tap-to-swim diver movement — simple procedural bob/tilt, no full rig</li>
+            <li>O2 system with live gauge; baseline, drill, and boost drain multipliers</li>
+            <li>5-minute storm timer with late-game visual pressure (darkening, pulsing HUD)</li>
+            <li>Per-run randomized placement of parts, drillable rocks, floodlights, spare O2, fins, sea mounts, shark lanes</li>
+            <li>Sonar ping (directional bearing hint, not a full radar map)</li>
+            <li>Drilling interaction — hold, fill-ring, releases a part or O2 tank</li>
+            <li>Fin pickups (permanent per-run speed multiplier)</li>
+            <li>1–2 sharks with patrol + chase-if-close steering behavior</li>
+            <li>Boost button — speed burst, higher O2 drain, cooldown</li>
+            <li>Auto-repair on return to ship</li>
+            <li>Unified Game Over for all three fail states</li>
+            <li>Score formula, local high score, Retry loop</li>
+          </ul>
+        </div>
+        <div class="scope-col out">
+          <h3>Later — See Future Vision</h3>
+          <ul>
+            <li>Multiple biomes / levels</li>
+            <li>Meta-progression, currency, permanent unlocks</li>
+            <li>Daily seeds, global leaderboards, backend services</li>
+            <li>Cosmetic customization</li>
+            <li>Story beats, cutscenes, additional characters</li>
+            <li>Full sound design (prototype ships with placeholder SFX only)</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section id="progression">
+      <div class="section-eyebrow"><span>06</span><span class="of">/ 07</span></div>
+      <h2>Progression &amp; Signature Twist</h2>
+      <p class="dek">Nothing carries over between runs by design — the pressure resets every dive. That's deliberate.</p>
+
+      <p>Progression here happens <em>within</em> a single dive, not across runs: a floodlight makes the next dark pocket readable, a pair of fins makes every subsequent swim cheaper in O2, a spare tank buys you the time to risk one more drill. Each pickup compounds the ones before it for the rest of that run — then it's gone, and the next dive starts from zero again.</p>
+
+      <div class="twist-grid">
+        <div class="twist-card card">
+          <h3>1. A Fixed-Length Tension Arc</h3>
+          <p>Unlike an endless runner's infinite ramp, every run is the same five minutes — so the skill ceiling isn't survival, it's efficiency. Past the 60-second mark the storm visibly closes in: visibility drops, the water desaturates, the HUD pulses. Same clock, escalating pressure, every single run.</p>
+        </div>
+        <div class="twist-card card">
+          <h3>2. Risk-Adjacent Scoring</h3>
+          <p>Score rewards proximity to danger, not just avoidance of it — each close call with a shark (entering its danger radius and escaping alive) banks a risk bonus. Playing safe is viable; playing bold scores higher. That's the pull for one more dive, the same way a near-miss in Subway Surfers feels better than a clean lane change.</p>
+        </div>
+      </div>
+
+      <div class="formula-card">
+        <div class="formula-label">Score Formula</div>
+        <div class="formula">SCORE <span class="op">=</span> (PARTS <span class="op">×</span> 200) <span class="op">+</span> (O2 REMAINING <span class="op">×</span> 5) <span class="op">+</span> (TIME REMAINING <span class="op">×</span> 3) <span class="op">+</span> (CLOSE CALLS <span class="op">×</span> 50)</div>
+      </div>
+    </section>
+
+    <section id="future">
+      <div class="section-eyebrow"><span>07</span><span class="of">/ 07</span></div>
+      <h2>Future State Vision</h2>
+      <p class="dek">Where this goes once the prototype proves the loop — grouped by what each addition is actually for.</p>
+
+      <div class="future-grid">
+        <div class="future-card card">
+          <h3>Content</h3>
+          <ul>
+            <li>Additional biomes: kelp forest, shipwreck graveyard, deep trench</li>
+            <li>New hazards per biome: currents, electric eels, jellyfish swarms</li>
+            <li>More shark species and pack behavior</li>
+          </ul>
+        </div>
+        <div class="future-card card">
+          <h3>Progression</h3>
+          <ul>
+            <li>Meta-currency ("Salvage Points") earned per run</li>
+            <li>Permanent upgrades: starting O2 capacity, fin speed, drill speed, sonar range</li>
+          </ul>
+        </div>
+        <div class="future-card card">
+          <h3>Replayability &amp; Social</h3>
+          <ul>
+            <li>Daily seeded challenge runs</li>
+            <li>Global / friend leaderboards</li>
+            <li>Ghost replays of best runs</li>
+          </ul>
+        </div>
+        <div class="future-card card">
+          <h3>Narrative</h3>
+          <ul>
+            <li>Light story layer: other stranded divers to find and rescue</li>
+            <li>Radio-chatter beats between runs</li>
+          </ul>
+        </div>
+        <div class="future-card card">
+          <h3>Storm Escalation</h3>
+          <ul>
+            <li>Lightning strikes that briefly blind or scramble the sonar</li>
+            <li>Stronger current pushing the diver off course late in a run</li>
+          </ul>
+        </div>
+        <div class="future-card card">
+          <h3>Accessibility &amp; Monetization</h3>
+          <ul>
+            <li>Colorblind-safe HUD states, adjustable control sensitivity</li>
+            <li>Rewarded-ad continues; cosmetic-only IAP — no pay-to-win</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<footer>
+  <div class="container">
+    <p>Depth Rush — Game Design Document · Prototype scope for a 10-day build · Titles, numbers, and formulas above are proposals — tune freely during production.</p>
+  </div>
+</footer>
