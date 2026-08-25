@@ -35,6 +35,18 @@ Game Over with a score breakdown and a local best.
 **Deliberately deferred.** Audio (placeholder SFX only, and not yet wired). Diver rig — procedural
 bob and tilt stands in. Any meta-progression. Anything from the GDD's Future Vision section.
 
+**Two bugs found and fixed while smoke-testing the loop.**
+- *Hold-to-drill cancelled itself.* The swim target was re-derived from the touch point every
+  frame, and because the camera lerps toward the diver, the same screen point maps to a drifting
+  world point — so the diver swam off the rock mid-hold and the drill silently reset. The drill now
+  **latches**: once it starts, the target pins to the rock until release or completion.
+- *Dying was worth 1,400 points.* The score tallied O2 and time remaining at the moment the run
+  ended, so drowning on the surface at 0:01 paid out a full unspent cushion. Score now banks
+  **only at the ship**: parts, unspent O2 and unspent clock are cashed in on each return, and
+  anything still in hand is lost with the diver. This is a deliberate deviation from the GDD's
+  "tally at Game Over" wording — without it there is no cost to dying, which kills the core bet.
+  Worth confirming before it hardens.
+
 **Open questions for the next session.**
 - Is a full tank (≈190s of plain swimming) too generous against a 300s storm? The intended tension
   is that you cannot cover the whole seabed on one tank, so the ship top-off becomes the real
@@ -44,7 +56,10 @@ bob and tilt stands in. Any meta-progression. Anything from the GDD's Future Vis
 - Close-call detection currently fires on leaving the danger radius by any means. It may need a
   minimum dwell time so brushing the edge does not farm bonuses.
 
-**Verification.** `tools/package.sh` passes: index.html at the zip top level, no absolute URLs, no
+**Verification.** Systems driven headlessly through the `globalThis.DepthRush` playtest hook:
+level generation, part pickup, drill (rock opens, part awarded, O2 drains at exactly 2×),
+auto-repair banking, close-call banking on escape, shark catch, tank-dry and storm-timeout fail
+states, Game Over breakdown, and the retry loop all confirmed. `tools/package.sh` passes: index.html at the zip top level, no absolute URLs, no
 network APIs, archive well under 35MB.
 
 ---

@@ -28,7 +28,9 @@ MB=$(( BYTES / 1048576 ))
 [ "$BYTES" -lt 36700160 ] || fail "zip is ${MB}MB, limit is 35MB"
 
 # index.html must sit at the top level of the archive.
-unzip -l "$OUT" | grep -qE " index.html$" || fail "index.html is not at the zip top level"
+# (Listing is captured first: grep -q under `set -o pipefail` would SIGPIPE unzip.)
+LISTING=$(unzip -l "$OUT")
+grep -qE " index\.html$" <<< "$LISTING" || fail "index.html is not at the zip top level"
 
 echo "OK  $OUT  (${BYTES} bytes, ~${MB}MB)"
-unzip -l "$OUT" | tail -n 5
+tail -n 4 <<< "$LISTING"

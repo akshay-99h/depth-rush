@@ -21,7 +21,7 @@ export function createCamera() {
 export function createScene() {
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x0a2740);
-  scene.fog = new THREE.Fog(0x0a2740, 10, 34);
+  scene.fog = new THREE.Fog(0x0a2740, 16, 44);
 
   scene.add(new THREE.AmbientLight(0x6fd8e0, 0.55));
   const sun = new THREE.DirectionalLight(0xbfefff, 0.9);

@@ -104,6 +104,8 @@ function startRun(seed = randomSeed()) {
     finStacks: 0,
     lightStacks: 0,
     bankedScore: 0,
+    returns: 0,
+    breakdown: { parts: 0, oxygen: 0, time: 0, closeCalls: 0 },
     boosting: false,
     boostCharge: CONFIG.boost.maxHold,
     boostReady: true,
@@ -123,13 +125,10 @@ function endRun(reason) {
   state.over = true;
   running = false;
 
-  const bd = {
-    parts: state.partsBanked * CONFIG.score.perPart,
-    oxygen: Math.round(state.oxygen) * CONFIG.score.perOxygen,
-    time: Math.round(Math.max(0, state.timeLeft)) * CONFIG.score.perSecond,
-    closeCalls: state.closeCalls * CONFIG.score.perCloseCall,
-  };
-  // Only banked parts score — anything still in hand goes down with the diver.
+  // Everything scores at the ship, not at the moment of death: parts still in hand
+  // and the O2/time cushion you never cashed in are lost with the diver. Without
+  // this, drowning on the surface at 0:01 scored a free 1,400.
+  const bd = state.breakdown;
   const total = bd.parts + bd.oxygen + bd.time + bd.closeCalls;
 
   const best = Math.max(total, Number(localStorage.getItem('depthrush.best') || 0));
@@ -139,8 +138,8 @@ function endRun(reason) {
   overlayReason.textContent = reason;
   overlayBreakdown.innerHTML = [
     ['Parts repaired', `${state.partsBanked} × ${CONFIG.score.perPart}`, bd.parts],
-    ['O2 remaining', `${Math.round(state.oxygen)} × ${CONFIG.score.perOxygen}`, bd.oxygen],
-    ['Time remaining', `${Math.round(Math.max(0, state.timeLeft))}s × ${CONFIG.score.perSecond}`, bd.time],
+    ['O2 banked', `at ${state.returns} return${state.returns === 1 ? '' : 's'}`, bd.oxygen],
+    ['Time banked', `at ${state.returns} return${state.returns === 1 ? '' : 's'}`, bd.time],
     ['Close calls', `${state.closeCalls} × ${CONFIG.score.perCloseCall}`, bd.closeCalls],
   ].map(([label, calc, value]) =>
     `<li><span>${label}</span><em>${calc}</em><b>${value.toLocaleString()}</b></li>`
@@ -169,7 +168,7 @@ function update(dt) {
   input.update(dt);
 
   // ---- steering -------------------------------------------------------
-  if (input.pointerDown || input.consumeTap()) {
+  if (!state.drillTarget && (input.pointerDown || input.consumeTap())) {
     const world = screenToWorld(input.screen.x, input.screen.y);
     s.target.set(
       THREE.MathUtils.clamp(world.x, -W.halfWidth, W.halfWidth),
@@ -178,12 +177,23 @@ function update(dt) {
   }
 
   // ---- drill: holding near a rock cracks it open -----------------------
-  const rockHit = nearest(s.level.rocks, s.target, (r) => !r.opened);
-  const holdingOnRock = input.pointerDown && rockHit && rockHit.dist < CONFIG.drill.radius
-    && Math.hypot(rockHit.obj.x - p.x, rockHit.obj.y - p.y) < CONFIG.drill.radius + 0.6;
+  // The drill latches once it starts. Without the latch the target keeps being
+  // re-derived from a screen point while the camera drifts, so the diver swims
+  // off the rock mid-hold and the drill silently cancels itself.
+  if (!input.pointerDown) {
+    s.drillTarget = null;
+    s.drillProgress = 0;
+  } else if (!s.drillTarget) {
+    const hit = nearest(s.level.rocks, s.target, (r) => !r.opened);
+    const inReach = hit && hit.dist < CONFIG.drill.radius
+      && Math.hypot(hit.obj.x - p.x, hit.obj.y - p.y) < CONFIG.drill.radius + 0.6;
+    if (inReach) { s.drillTarget = hit.obj; s.drillProgress = 0; }
+  }
 
+  const holdingOnRock = !!s.drillTarget;
   if (holdingOnRock) {
-    s.drillTarget = rockHit.obj;
+    // hold station on the rock so the swim step cannot pull the diver off it
+    s.target.set(s.drillTarget.x, s.drillTarget.y + 0.4);
     s.drillProgress += dt / CONFIG.drill.seconds;
     if (s.drillProgress >= 1) {
       const rock = s.drillTarget;
@@ -195,9 +205,6 @@ function update(dt) {
       s.drillTarget = null;
       s.drillProgress = 0;
     }
-  } else {
-    s.drillTarget = null;
-    s.drillProgress = 0;
   }
 
   // ---- boost ----------------------------------------------------------
@@ -263,8 +270,16 @@ function update(dt) {
   // ---- auto-repair on return -----------------------------------------
   const atShip = Math.hypot(s.ship.position.x - p.x, s.ship.position.y - p.y) < W.shipReturnRadius;
   if (atShip && s.carrying > 0) {
+    // A return cashes in the whole trip: parts, the O2 you did not burn, and the
+    // clock you did not spend. That is what makes staying down one more drill a bet.
+    const o2Bonus = Math.round(s.oxygen) * CONFIG.score.perOxygen;
+    const timeBonus = Math.round(Math.max(0, s.timeLeft)) * CONFIG.score.perSecond;
+    s.breakdown.parts += s.carrying * CONFIG.score.perPart;
+    s.breakdown.oxygen += o2Bonus;
+    s.breakdown.time += timeBonus;
     s.partsBanked += s.carrying;
-    s.bankedScore += s.carrying * CONFIG.score.perPart;
+    s.bankedScore += s.carrying * CONFIG.score.perPart + o2Bonus + timeBonus;
+    s.returns += 1;
     s.carrying = 0;
     s.oxygen = CONFIG.oxygen.max;   // topping off at the ship is the risk/reward pivot
   }
@@ -286,6 +301,7 @@ function update(dt) {
       if (shark.inDanger) {  // escaped the danger radius alive — bank the close call
         shark.inDanger = false;
         s.closeCalls += 1;
+        s.breakdown.closeCalls += CONFIG.score.perCloseCall;
         s.bankedScore += CONFIG.score.perCloseCall;
       }
       shark.chaseTimer -= dt;
@@ -312,8 +328,10 @@ function update(dt) {
   // ---- storm pressure --------------------------------------------------
   const lateT = 1 - THREE.MathUtils.clamp(s.timeLeft / CONFIG.run.lateGameSeconds, 0, 1);
   const light = 1 + s.lightStacks * 0.35;
-  scene.fog.far = (34 - lateT * 16) * light;
-  scene.background.setHSL(0.55, 0.55 - lateT * 0.35, 0.14 - lateT * 0.07);
+  scene.fog.far = (44 - lateT * 20) * light;
+  // setHSL defaults to the linear working space; pass sRGB so these read as authored.
+  scene.background.setHSL(0.55, 0.55 - lateT * 0.35, 0.14 - lateT * 0.07, THREE.SRGBColorSpace);
+  scene.fog.color.copy(scene.background);
   murk.position.x = Math.sin(performance.now() * 0.0002) * 1.5;
 
   // ---- camera ----------------------------------------------------------
@@ -341,3 +359,23 @@ function frame(now) {
 resize();
 startRun();
 requestAnimationFrame(frame);
+
+// Playtest hook: step the sim by hand, restart from a fixed seed, or inspect state
+// from the console. Also how the smoke test in tools/ drives a headless run.
+globalThis.DepthRush = {
+  step: (dt = 1 / 60, n = 1) => { for (let i = 0; i < n && running; i++) update(dt); return globalThis.DepthRush.state; },
+  restart: (seed) => startRun(seed),
+  get state() {
+    return {
+      seed: state.seed, oxygen: state.oxygen, timeLeft: state.timeLeft,
+      depth: state.depth, x: state.diver.position.x, carrying: state.carrying,
+      partsBanked: state.partsBanked, closeCalls: state.closeCalls,
+      finStacks: state.finStacks, lightStacks: state.lightStacks,
+      drilling: !!state.drillTarget, drillProgress: state.drillProgress,
+      targetX: state.target.x, targetY: state.target.y,
+      score: state.bankedScore, over: state.over, running,
+    };
+  },
+  get level() { return state.level; },
+  moveTo: (x, y) => { state.diver.position.set(x, y, 0); state.target.set(x, y); },
+};
