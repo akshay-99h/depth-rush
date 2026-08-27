@@ -64,7 +64,61 @@ network APIs, archive well under 35MB.
 
 ---
 
-## Session 02 — TBD
+## Session 02 — 2026-08-25 · Rebuild around the UI lofi
+
+**Goal.** Take `docs/lofi-game-ui.pdf` as the source of truth for structure and rebuild the
+game layer to match it. Full reasoning in `docs/ui-design.md`.
+
+**What the lofi changed.** It is not a reskin — it restructures the loop. The storm clock
+becomes 8 minutes; tap-to-swim becomes a virtual joystick; the single continuous dive becomes
+a **boat screen (Dive / Repair) plus an underwater screen**; and the abstract part count
+becomes a **five-item checklist** with a ship-progress bar and an "Off to shore" win screen.
+The GDD had no win condition at all — only three ways to die. That was the gap worth closing.
+
+**Built this session.**
+- Seven-screen flow: landing → FTUX → boat ⇄ dive → end, settings as a modal over any of them.
+- `Joystick` replaces the old tap input. Boost moved to a bottom-right thumb button.
+- Two-mode sim in `game.js` sharing one clock. Surfacing at the hull refills the tank;
+  holding Repair fits carried parts one at a time while the storm clock keeps running.
+- Five named parts (Propeller, Rudder, Hull Plate, Fuel Line, Radio), three of them sealed
+  inside rocks. Each has its own silhouette.
+- Drilling with no button: push the stick into a rock and hold. Keeps the lofi's one-control
+  restraint and cannot be fired by accident.
+- Sonar as a chevron above the diver's oxygen bar rather than a corner dial.
+- Win state with the boat sailing off on the live scene behind the score card.
+- Runtime-synthesised audio so the Music / Sound toggles do something real — no audio files,
+  no network.
+- Flat unlit visual system; scene tint computed from diver depth and storm progress.
+
+**Deviations from the lofi, deliberate.**
+- Added a boost button underwater; the lofi shows only the stick. Dodging a shark needs a
+  reactive out and the GDD specifies it.
+- Added a loss variant of the end screen. The lofi only draws the win.
+- Checklist shows all five part names from the start (dimmed until found) rather than
+  hiding them — knowing you still need a rudder is the point of having a checklist.
+
+**Fixed while verifying.** The boat sat entirely under the waterline and the boat-mode camera
+was close enough to crop it; `boatY` and the framing were both wrong. The win outro originally
+put the sailing boat directly behind the score card, where the scrim swallowed it — the camera
+now frames it in the upper third.
+
+**Open questions for the next session.**
+- 8 minutes may be long for a mobile session (the GDD targeted 90s–5min). It is the number
+  written into the FTUX copy, so it stays until a real playtest says otherwise.
+- Repair at 2.6s per part means a full five-part repair costs ~13s of the clock. Probably
+  too cheap to be a real decision — worth raising once dive pacing is known.
+- The playfield is 32m × 18m with 7 rocks and 7 pickups. It reads sparse on screen; either
+  tighten the bounds or raise the spawn counts.
+
+**Verification.** Driven headlessly through `globalThis.DepthRush`. Confirmed: full win path
+(collect both loose parts → drill all three sealed rocks → surface → hold repair → win, 3,300);
+all four end paths (drowned, caught by shark, storm timeout, quit) with correct scores —
+0 for dying with nothing fitted, 200 for one part fitted; checklist states; settings pause;
+oxygen draining at exactly 2× while drilling. `tools/package.sh` passes.
+
+---
+
+## Session 03 — TBD
 
 <!-- Template:
 **Goal.**

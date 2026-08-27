@@ -1,79 +1,86 @@
 // Depth Rush — all gameplay tunables in one place.
-// GDD numbers are proposals; tune here, not in the systems.
+// Numbers follow the UI lofi where the two disagree with the GDD (8-minute storm,
+// five named parts, joystick control, boat/dive split).
 
 export const CONFIG = {
   run: {
-    stormSeconds: 300,        // 5:00 storm timer
-    lateGameSeconds: 60,      // visual pressure inside the last minute
+    stormSeconds: 480,        // "The storm returns in 8 minutes."
+    lateGameSeconds: 90,      // visual pressure inside the last 90s
+    criticalSeconds: 30,      // timer goes red and the water goes black
   },
 
   world: {
     surfaceY: 0,
-    seabedY: -15,
-    halfWidth: 14,            // playfield spans -halfWidth .. +halfWidth in X
-    shipX: 0,
-    shipReturnRadius: 1.6,
+    seabedY: -18,
+    halfWidth: 16,
+    boatX: 0,
+    boatY: -0.35,
+    surfaceRadius: 2.2,       // swim this close to the boat to surface
   },
 
   diver: {
-    baseSpeed: 3.2,           // metres / second
-    accel: 9.0,
-    arriveRadius: 0.25,
-    collectRadius: 0.9,
+    speed: 4.4,               // metres / second at full stick
+    accel: 7.5,
+    drag: 2.2,
+    collectRadius: 1.0,
   },
 
   oxygen: {
     max: 100,
-    baseDrain: 100 / 190,     // full tank ≈ 190s of plain swimming
+    baseDrain: 100 / 85,      // a full tank is ~85s of ordinary swimming
     drillMultiplier: 2,
     boostMultiplier: 3,
-    tankRefill: 35,
+    tankRefill: 40,
     amberBelow: 0.40,
     redBelow: 0.15,
   },
 
   boost: {
-    speedMultiplier: 2.1,
-    maxHold: 1.6,             // seconds of continuous boost
-    cooldown: 2.0,
+    speedMultiplier: 2.0,
+    maxHold: 1.8,
+    cooldown: 2.4,
   },
 
   drill: {
-    seconds: 1.5,             // hold duration to crack a rock
-    radius: 1.3,              // how close the touch point must be
+    seconds: 1.6,             // push the stick into a rock this long to crack it
+    contactRadius: 1.5,
+  },
+
+  repair: {
+    secondsPerPart: 2.6,      // held on the boat, with the storm clock still running
   },
 
   fins: {
-    speedBonus: 0.18,         // +18% swim speed per pickup, per run
+    speedBonus: 0.16,
     maxStacks: 3,
   },
 
   floodlight: {
-    radiusBonus: 2.5,         // widens the visible pocket
+    radiusBonus: 3.0,
     maxStacks: 3,
   },
 
   shark: {
     count: 2,
-    patrolSpeed: 2.2,
-    chaseSpeed: 3.6,
-    dangerRadius: 3.0,        // enters warning pulse + banks a close call on escape
-    catchRadius: 0.7,
+    patrolSpeed: 2.4,
+    chaseSpeed: 3.9,
+    dangerRadius: 3.2,
+    catchRadius: 0.8,
     loseInterestAfter: 4.0,
+    closeCallDwell: 0.45,     // must stay in the radius this long to bank a close call
   },
 
   spawn: {
-    parts: 4,                 // ship parts to find (score driver)
-    rocks: 6,                 // drillable — each yields a part or a tank
-    tanks: 2,                 // free-floating spare O2
+    partsInRocks: 3,          // of the five; the rest lie loose on the seabed
+    rocks: 7,
+    tanks: 3,
     fins: 2,
     floodlights: 2,
   },
 
   score: {
-    perPart: 200,
-    perOxygen: 5,             // × O2 remaining at return
-    perSecond: 3,             // × time remaining at return
+    perPartInstalled: 200,
     perCloseCall: 50,
+    perSecondOnEscape: 5,     // only paid if the boat actually sails
   },
 };

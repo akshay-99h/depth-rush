@@ -5,124 +5,364 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
 <title>Depth Rush</title>
 <style>
+  /* ------------------------------------------------------------------
+     Depth Rush — visual system
+     Flat, high-contrast, sunlight-readable. One accent (signal amber) is
+     reserved for urgency only, so when it appears the player looks at it.
+     No webfonts: the build may not make external requests.
+     ------------------------------------------------------------------ */
   :root {
-    --accent: #35d6c4;
-    --warn: #f5a24a;
-    --danger: #ff5a5a;
-    --ink: #e7f3f1;
-    --mono: 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
+    --abyss:   #04141c;
+    --deep:    #072430;
+    --water:   #0d3a4a;
+    --shallow: #14586b;
+    --foam:    #7fd4d9;
+    --ink:     #eaf6f5;
+    --muted:   #7f9ba3;
+    --ok:      #35d6c4;
+    --signal:  #ffb340;
+    --danger:  #ff4d5e;
+    --chip:    rgba(7, 36, 48, 0.78);
+    --stroke:  rgba(127, 212, 217, 0.35);
+    --ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    --safe-t: env(safe-area-inset-top, 0px);
+    --safe-b: env(safe-area-inset-bottom, 0px);
   }
-  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-  html, body { margin: 0; height: 100%; overflow: hidden; background: #05121a; color: var(--ink); font-family: var(--mono); }
-  body { touch-action: none; user-select: none; }
-
-  #stage { position: fixed; inset: 0; }
-  #game { width: 100%; height: 100%; display: block; }
-
-  #hud { position: fixed; inset: 0; pointer-events: none; padding: max(12px, env(safe-area-inset-top)) 12px 12px; }
-  .label { font-size: 10px; letter-spacing: 0.12em; opacity: 0.65; margin-bottom: 4px; }
-  .value { font-size: 18px; font-variant-numeric: tabular-nums; }
-
-  #hud-o2 { position: absolute; top: 14px; left: 12px; }
-  #o2-track { width: 14px; height: 110px; border: 1px solid rgba(255,255,255,0.45); border-radius: 5px; display: flex; align-items: flex-end; overflow: hidden; }
-  #o2-fill { width: 100%; height: 100%; background: var(--accent); transition: height 0.1s linear; }
-  #hud-o2[data-level="amber"] #o2-fill { background: var(--warn); }
-  #hud-o2[data-level="red"] #o2-fill { background: var(--danger); animation: pulse 0.6s infinite; }
-
-  #hud-timer { position: absolute; top: 14px; right: 12px; text-align: right; }
-  #hud-timer[data-late="true"] .value { color: var(--warn); animation: pulse 1s infinite; }
-  #hud-score { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); text-align: center; }
-  #hud-carry { position: absolute; top: 62px; left: 50%; transform: translateX(-50%); text-align: center; font-size: 11px; opacity: 0.8; }
-
-  #hud-sonar { position: absolute; bottom: 20px; left: 14px; text-align: center; }
-  #sonar-dial { width: 52px; height: 52px; border-radius: 50%; border: 1px solid rgba(255,255,255,0.4); position: relative; overflow: hidden; margin-bottom: 4px; }
-  #sonar-sweep { position: absolute; top: 0; left: 50%; width: 1px; height: 50%; background: linear-gradient(var(--accent), transparent); transform-origin: bottom center; animation: sweep 2s linear infinite; }
-  #sonar-tick { position: absolute; top: 4px; left: 50%; width: 3px; height: 10px; margin-left: -1.5px; background: var(--accent); transform-origin: 50% 22px; border-radius: 2px; }
-  @keyframes sweep { to { transform: rotate(360deg); } }
-  @keyframes pulse { 50% { opacity: 0.35; } }
-
-  #boost-btn {
-    pointer-events: auto; position: absolute; bottom: 20px; right: 14px;
-    width: 78px; height: 78px; border-radius: 50%; border: 1px solid rgba(53,214,196,0.6);
-    background: rgba(53,214,196,0.22); color: #fff; font-family: var(--mono);
-    font-size: 11px; letter-spacing: 0.1em; touch-action: none;
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; margin: 0; padding: 0; }
+  html, body { height: 100%; overflow: hidden; background: var(--abyss); }
+  body {
+    font-family: var(--ui);
+    color: var(--ink);
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+    font-variant-numeric: tabular-nums;
   }
-  #boost-btn[data-state="active"] { background: rgba(53,214,196,0.75); }
-  #boost-btn[data-state="cooling"] { opacity: 0.35; }
+  button { font-family: inherit; color: inherit; background: none; border: none; cursor: pointer; }
 
-  #drill-ring {
-    position: absolute; bottom: 110px; left: 50%; transform: translateX(-50%);
-    width: 120px; height: 6px; border: 1px solid rgba(255,255,255,0.4); border-radius: 4px; opacity: 0;
-    transition: opacity 0.12s;
+  #game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+
+  /* ---------- screen layers ---------- */
+  .screen {
+    position: fixed; inset: 0; display: none;
+    padding: calc(var(--safe-t) + 14px) 16px calc(var(--safe-b) + 18px);
   }
-  #drill-ring[data-on="true"] { opacity: 1; }
-  #drill-ring::after { content: ""; display: block; height: 100%; width: var(--fill, 0%); background: var(--accent); }
+  .screen[data-on="true"] { display: block; }
+  .screen.solid { background: var(--abyss); }
 
-  #shark-warning {
-    position: absolute; inset: 0; border: 3px solid var(--danger); opacity: 0;
+  /* ---------- shared chips ---------- */
+  .chip {
+    position: absolute; pointer-events: auto;
+    display: grid; place-items: center; text-align: center;
+    background: var(--chip); border: 1px solid var(--stroke);
+    backdrop-filter: blur(6px);
+    border-radius: 999px;
+  }
+  .chip-round { width: 52px; height: 52px; }
+  .chip-label { font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+
+  #btn-settings { top: calc(var(--safe-t) + 14px); left: 16px; }
+  #btn-settings svg { width: 20px; height: 20px; }
+
+  #hud-timer {
+    top: calc(var(--safe-t) + 14px); right: 16px;
+    width: 74px; height: 52px; border-radius: 26px;
+  }
+  #timer-value { font-size: 19px; font-weight: 650; letter-spacing: -0.01em; line-height: 1; }
+  #hud-timer[data-late="true"] #timer-value { color: var(--signal); }
+  #hud-timer[data-late="critical"] #timer-value { color: var(--danger); animation: throb 1s infinite; }
+  @keyframes throb { 50% { opacity: 0.4; } }
+
+  /* ---------- checklist ---------- */
+  #checklist { position: absolute; top: calc(var(--safe-t) + 76px); right: 16px; width: 74px; }
+  #btn-checklist {
+    position: relative; width: 74px; height: 44px; border-radius: 22px;
+    display: grid; place-items: center; pointer-events: auto;
+    background: var(--chip); border: 1px solid var(--stroke);
+  }
+  #checklist-count { font-size: 15px; font-weight: 650; }
+  #checklist-items { margin-top: 8px; display: none; flex-direction: column; gap: 6px; }
+  #checklist[data-open="true"] #checklist-items { display: flex; }
+  .cl-item {
+    display: flex; align-items: center; gap: 6px;
+    padding: 7px 8px; border-radius: 12px;
+    background: var(--chip); border: 1px solid var(--stroke);
+    font-size: 9.5px; letter-spacing: 0.02em; line-height: 1.1;
+  }
+  .cl-item .cl-glyph { font-size: 11px; width: 12px; text-align: center; opacity: 0.5; }
+  .cl-item[data-state="unknown"]   { color: var(--muted); opacity: 0.62; }
+  .cl-item[data-state="carried"]   { color: var(--signal); border-color: rgba(255,179,64,0.5); }
+  .cl-item[data-state="installed"] { color: var(--ok); border-color: rgba(53,214,196,0.45); }
+  .cl-item[data-state="installed"] .cl-glyph { opacity: 1; }
+
+  /* ---------- ship progress ---------- */
+  #ship-progress {
+    position: absolute; top: calc(var(--safe-t) + 26px); left: 80px; right: 104px;
+    height: 28px; display: grid; align-content: center; gap: 5px;
+  }
+  #ship-progress .cap {
+    font-size: 8.5px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted);
+  }
+  #ship-track { height: 6px; border-radius: 3px; background: rgba(127,212,217,0.16); overflow: hidden; }
+  #ship-fill { height: 100%; width: 0%; background: var(--ok); border-radius: 3px; transition: width 0.35s ease; }
+
+  /* ---------- boat screen ---------- */
+  #screen-boat .stage-frame {
+    position: absolute; left: 16px; right: 16px; top: calc(var(--safe-t) + 132px); bottom: 132px;
+    border-radius: 18px; pointer-events: none;
+  }
+  #boat-status {
+    position: absolute; left: 16px; right: 16px; bottom: calc(var(--safe-b) + 92px);
+    text-align: center; font-size: 12px; color: var(--muted); min-height: 16px;
+  }
+  #boat-status b { color: var(--signal); font-weight: 600; }
+  .boat-actions {
+    position: absolute; left: 16px; right: 16px; bottom: calc(var(--safe-b) + 18px);
+    display: grid; grid-template-columns: 1fr 1fr; gap: 12px; pointer-events: auto;
+  }
+  .big-btn {
+    height: 58px; border-radius: 16px; font-size: 14px; font-weight: 650;
+    letter-spacing: 0.1em; text-transform: uppercase; position: relative; overflow: hidden;
+    border: 1px solid var(--stroke); background: var(--chip); color: var(--ink);
+  }
+  .big-btn.primary { background: var(--ok); color: var(--abyss); border-color: transparent; }
+  .big-btn:disabled { opacity: 0.35; }
+  #btn-repair .fill {
+    position: absolute; inset: 0; width: var(--fill, 0%);
+    background: rgba(255,179,64,0.4); pointer-events: none; transition: width 0.05s linear;
+  }
+  #btn-repair span { position: relative; }
+
+  /* ---------- dive controls ---------- */
+  #joystick {
+    position: absolute; bottom: calc(var(--safe-b) + 26px); left: 22px;
+    width: 116px; height: 116px; border-radius: 50%;
+    background: rgba(7,36,48,0.55); border: 1px solid var(--stroke);
+    pointer-events: auto; touch-action: none;
+  }
+  #stick {
+    position: absolute; top: 50%; left: 50%; width: 52px; height: 52px; margin: -26px 0 0 -26px;
+    border-radius: 50%; background: rgba(127,212,217,0.85);
+    box-shadow: 0 0 0 6px rgba(127,212,217,0.12);
+  }
+  #btn-boost {
+    position: absolute; bottom: calc(var(--safe-b) + 34px); right: 22px;
+    width: 84px; height: 84px; border-radius: 50%; pointer-events: auto; touch-action: none;
+    background: rgba(53,214,196,0.16); border: 2px solid rgba(53,214,196,0.55);
+    font-size: 11px; font-weight: 650; letter-spacing: 0.12em;
+  }
+  #btn-boost[data-state="active"] { background: rgba(53,214,196,0.7); color: var(--abyss); }
+  #btn-boost[data-state="cooling"] { opacity: 0.3; }
+
+  #dive-hint {
+    position: absolute; left: 0; right: 0; bottom: calc(var(--safe-b) + 156px);
+    text-align: center; font-size: 11px; letter-spacing: 0.06em; color: var(--foam);
+    opacity: 0; transition: opacity 0.2s;
+  }
+  #dive-hint[data-on="true"] { opacity: 0.9; }
+
+  #danger-vignette {
+    position: absolute; inset: 0; pointer-events: none; opacity: 0;
+    box-shadow: inset 0 0 90px 10px rgba(255,77,94,0.75);
     transition: opacity 0.15s;
   }
-  #shark-warning[data-on="true"] { opacity: 1; animation: pulse 0.5s infinite; }
+  #danger-vignette[data-on="true"] { opacity: 1; animation: throb 0.55s infinite; }
 
-  #overlay {
-    position: fixed; inset: 0; display: none; place-items: center;
-    background: rgba(5,18,26,0.92); padding: 24px; text-align: center;
+  #toast {
+    position: absolute; left: 50%; top: calc(var(--safe-t) + 140px); transform: translateX(-50%);
+    padding: 9px 15px; border-radius: 999px; background: var(--chip); border: 1px solid var(--stroke);
+    font-size: 12px; font-weight: 600; white-space: nowrap;
+    opacity: 0; transition: opacity 0.25s, transform 0.25s;
   }
-  #overlay[data-open="true"] { display: grid; }
-  #overlay h1 { font-size: 28px; letter-spacing: 0.14em; margin: 0 0 6px; }
-  #overlay-reason { opacity: 0.7; font-size: 13px; margin-bottom: 20px; }
-  #overlay-breakdown { list-style: none; padding: 0; margin: 0 auto 16px; max-width: 320px; font-size: 12px; }
-  #overlay-breakdown li { display: grid; grid-template-columns: 1fr auto auto; gap: 10px; padding: 7px 0; border-bottom: 1px dashed rgba(255,255,255,0.15); text-align: left; }
-  #overlay-breakdown em { opacity: 0.5; font-style: normal; }
-  #overlay-breakdown b { font-variant-numeric: tabular-nums; }
-  #overlay-breakdown .total { border-bottom: none; font-size: 15px; color: var(--accent); padding-top: 12px; }
-  #overlay-best { font-size: 12px; opacity: 0.7; margin-bottom: 20px; }
-  #retry-btn {
-    font-family: var(--mono); font-size: 13px; letter-spacing: 0.14em; color: #05121a;
-    background: var(--accent); border: none; border-radius: 999px; padding: 14px 34px;
+  #toast[data-on="true"] { opacity: 1; transform: translateX(-50%) translateY(6px); }
+
+  /* ---------- landing ---------- */
+  #screen-landing { display: none; place-content: center; text-align: center; }
+  #screen-landing[data-on="true"] { display: grid; }
+  .wordmark { font-size: 44px; font-weight: 750; letter-spacing: -0.02em; line-height: 0.95; }
+  .wordmark em { display: block; font-style: normal; color: var(--foam); }
+  .sub { margin-top: 10px; font-size: 11px; letter-spacing: 0.24em; text-transform: uppercase; color: var(--muted); }
+  #load-track { margin: 34px auto 0; width: 220px; height: 34px; border-radius: 10px; border: 1px solid var(--stroke); position: relative; overflow: hidden; display: grid; place-items: center; }
+  #load-fill { position: absolute; inset: 0; width: 0%; background: rgba(53,214,196,0.28); transition: width 0.2s linear; }
+  #load-track span { position: relative; font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; }
+
+  /* ---------- ftux ---------- */
+  #screen-ftux { display: none; }
+  #screen-ftux[data-on="true"] { display: block; }
+  #ftux-card {
+    position: absolute; left: 20px; right: 20px; top: calc(var(--safe-t) + 60px);
+    background: var(--chip); border: 1px solid var(--stroke); border-radius: 16px; padding: 20px;
   }
+  #ftux-card p { font-size: 16px; line-height: 1.5; font-weight: 550; }
+  #ftux-card p + p { margin-top: 10px; color: var(--foam); font-size: 13px; font-weight: 450; }
+  #btn-skip {
+    position: absolute; right: 20px; bottom: calc(var(--safe-b) + 24px);
+    padding: 13px 26px; border-radius: 999px; background: var(--ok); color: var(--abyss);
+    font-size: 12px; font-weight: 650; letter-spacing: 0.12em; text-transform: uppercase;
+  }
+  #ftux-beats {
+    position: absolute; left: 20px; right: 20px; top: 50%; transform: translateY(-40%);
+    display: flex; flex-direction: column; gap: 14px;
+  }
+  .beat { display: flex; gap: 12px; align-items: center; opacity: 0; transform: translateY(8px); transition: opacity 0.4s, transform 0.4s; }
+  .beat[data-on="true"] { opacity: 1; transform: none; }
+  .beat i { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; font-style: normal; background: rgba(127,212,217,0.14); border: 1px solid var(--stroke); font-size: 15px; }
+  .beat span { font-size: 13px; color: var(--muted); }
+
+  /* ---------- modals ---------- */
+  .modal { position: fixed; inset: 0; display: none; place-items: center; padding: 24px; background: rgba(4,20,28,0.86); }
+  .modal[data-on="true"] { display: grid; }
+  .sheet {
+    width: 100%; max-width: 320px; background: var(--deep);
+    border: 1px solid var(--stroke); border-radius: 20px; padding: 22px;
+  }
+  .sheet h2 { font-size: 13px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); font-weight: 600; margin-bottom: 18px; }
+  .row { display: flex; align-items: center; justify-content: space-between; padding: 12px 0; }
+  .row + .row { border-top: 1px solid rgba(127,212,217,0.12); }
+  .row .name { display: flex; align-items: center; gap: 11px; font-size: 14px; }
+  .row .name i { font-style: normal; width: 22px; display: grid; place-items: center; color: var(--foam); }
+  .toggle { width: 50px; height: 30px; border-radius: 999px; background: rgba(127,212,217,0.18); position: relative; transition: background 0.15s; }
+  .toggle::after { content: ""; position: absolute; top: 3px; left: 3px; width: 24px; height: 24px; border-radius: 50%; background: var(--ink); transition: transform 0.15s; }
+  .toggle[data-on="true"] { background: var(--ok); }
+  .toggle[data-on="true"]::after { transform: translateX(20px); }
+  .sheet-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 20px; }
+  .sheet-actions button { height: 46px; border-radius: 13px; font-size: 12px; font-weight: 650; letter-spacing: 0.1em; text-transform: uppercase; border: 1px solid var(--stroke); }
+  #btn-resume { background: var(--ok); color: var(--abyss); border-color: transparent; }
+  #btn-quit { color: var(--danger); border-color: rgba(255,77,94,0.4); }
+
+  /* ---------- end screens ---------- */
+  #screen-end { display: none; place-content: center; text-align: center; background: var(--abyss); }
+  #screen-end[data-outcome="win"] {
+    background: linear-gradient(180deg, rgba(4,20,28,0) 0%, rgba(4,20,28,0) 26%, rgba(4,20,28,0.9) 42%, rgba(4,20,28,0.97) 100%);
+    place-content: end center;
+    padding-bottom: calc(var(--safe-b) + 48px);
+  }
+  #screen-end[data-on="true"] { display: grid; }
+  #end-eyebrow { font-size: 10px; letter-spacing: 0.24em; text-transform: uppercase; color: var(--muted); }
+  #end-title { font-size: 34px; font-weight: 750; letter-spacing: -0.02em; margin-top: 8px; }
+  #screen-end[data-outcome="win"] #end-title { color: var(--ok); }
+  #screen-end[data-outcome="loss"] #end-title { color: var(--danger); }
+  #end-reason { margin-top: 8px; font-size: 13px; color: var(--muted); }
+  #end-breakdown { list-style: none; margin: 26px auto 0; width: 100%; max-width: 290px; }
+  #end-breakdown li { display: grid; grid-template-columns: 1fr auto; gap: 12px; padding: 9px 0; font-size: 12.5px; border-bottom: 1px solid rgba(127,212,217,0.12); }
+  #end-breakdown li span { color: var(--muted); text-align: left; }
+  #end-breakdown li b { font-weight: 650; }
+  #end-breakdown li.total { border-bottom: none; padding-top: 14px; font-size: 17px; }
+  #end-breakdown li.total span, #end-breakdown li.total b { color: var(--ok); }
+  #end-best { margin-top: 12px; font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+  #btn-again { margin: 26px auto 0; padding: 16px 40px; border-radius: 999px; background: var(--ok); color: var(--abyss); font-size: 13px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; }
 </style>
 </head>
 <body>
-  <div id="stage"><canvas id="game"></canvas></div>
+<canvas id="game"></canvas>
 
-  <div id="hud">
-    <div id="hud-o2" data-level="ok">
-      <div class="label">O2</div>
-      <div id="o2-track"><div id="o2-fill"></div></div>
-    </div>
+<!-- ============ LANDING ============ -->
+<section class="screen solid" id="screen-landing" data-on="true">
+  <div>
+    <h1 class="wordmark">DEPTH<em>RUSH</em></h1>
+    <div class="sub">Salvage before the storm</div>
+    <div id="load-track"><div id="load-fill"></div><span id="load-label">Loading</span></div>
+  </div>
+</section>
 
-    <div id="hud-score">
-      <div class="label">SCORE</div>
-      <div class="value" id="score-value">0</div>
-    </div>
-    <div id="hud-carry">CARRYING <span id="parts-value">0</span> · <span id="depth-value">0M</span></div>
+<!-- ============ FTUX ============ -->
+<section class="screen solid" id="screen-ftux">
+  <div id="ftux-card">
+    <p>The storm returns in 8 minutes.</p>
+    <p>Find the missing parts. Repair your boat. Escape.</p>
+  </div>
+  <div id="ftux-beats">
+    <div class="beat" data-beat="0"><i>◎</i><span>Drag the stick to swim. Push into rocks to drill them open.</span></div>
+    <div class="beat" data-beat="1"><i>◈</i><span>Five parts are down there. The marker above your tank points at the nearest one.</span></div>
+    <div class="beat" data-beat="2"><i>◐</i><span>Surface at the boat to refill your tank and fit what you found.</span></div>
+    <div class="beat" data-beat="3"><i>▲</i><span>Sharks patrol the seabed. Boost breaks away — it costs air.</span></div>
+  </div>
+  <button id="btn-skip">Skip</button>
+</section>
 
-    <div id="hud-timer" data-late="false">
-      <div class="label">STORM</div>
-      <div class="value" id="timer-value">5:00</div>
-    </div>
+<!-- ============ BOAT ============ -->
+<section class="screen" id="screen-boat">
+  <div class="stage-frame"></div>
+  <div id="boat-status"></div>
+  <div class="boat-actions">
+    <button class="big-btn primary" id="btn-dive">Dive</button>
+    <button class="big-btn" id="btn-repair"><div class="fill"></div><span>Repair</span></button>
+  </div>
+</section>
 
-    <div id="hud-sonar">
-      <div id="sonar-dial"><div id="sonar-sweep"></div><div id="sonar-tick"></div></div>
-      <div class="label">SONAR</div>
-    </div>
+<!-- ============ DIVE ============ -->
+<section class="screen" id="screen-dive">
+  <div id="dive-hint" data-on="false"></div>
+  <div id="joystick"><div id="stick"></div></div>
+  <button id="btn-boost" data-state="ready">BOOST</button>
+  <div id="danger-vignette" data-on="false"></div>
+</section>
 
-    <button id="boost-btn" data-state="ready">BOOST</button>
-    <div id="drill-ring" data-on="false"></div>
-    <div id="shark-warning" data-on="false"></div>
+<!-- ============ PERSISTENT HUD ============ -->
+<div class="screen" id="hud" data-on="false" style="pointer-events:none">
+  <button class="chip chip-round" id="btn-settings" aria-label="Settings">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+      <circle cx="12" cy="12" r="3.2"/>
+      <path d="M12 2.5v2.6M12 18.9v2.6M21.5 12h-2.6M5.1 12H2.5M18.7 5.3l-1.8 1.8M7.1 16.9l-1.8 1.8M18.7 18.7l-1.8-1.8M7.1 7.1L5.3 5.3"/>
+    </svg>
+  </button>
+
+  <div id="ship-progress">
+    <div class="cap">Progress of ship</div>
+    <div id="ship-track"><div id="ship-fill"></div></div>
   </div>
 
-  <div id="overlay" data-open="false">
+  <div class="chip" id="hud-timer" data-late="false">
     <div>
-      <h1 id="overlay-title">RUN OVER</h1>
-      <div id="overlay-reason"></div>
-      <ul id="overlay-breakdown"></ul>
-      <div id="overlay-best"></div>
-      <button id="retry-btn">DIVE AGAIN</button>
+      <div class="chip-label">Storm</div>
+      <div id="timer-value">8:00</div>
     </div>
   </div>
 
-  <script type="module" src="./src/main.js"></script>
+  <div id="checklist" data-open="false">
+    <button id="btn-checklist">
+      <div>
+        <div class="chip-label">Parts</div>
+        <div id="checklist-count">0/5</div>
+      </div>
+    </button>
+    <div id="checklist-items"></div>
+  </div>
+
+  <div id="toast" data-on="false"></div>
+</div>
+
+<!-- ============ SETTINGS ============ -->
+<div class="modal" id="modal-settings">
+  <div class="sheet">
+    <h2>Settings</h2>
+    <div class="row">
+      <div class="name"><i><svg viewBox="0 0 24 24" width="17" height="17" fill="currentColor"><path d="M9 17.5a2.5 2.5 0 1 1-2-2.45V6.2l10-2.1v9.9a2.5 2.5 0 1 1-2-2.45V6.55L9 7.9z"/></svg></i> Music</div>
+      <button class="toggle" id="tg-music" data-on="true" aria-label="Music"></button>
+    </div>
+    <div class="row">
+      <div class="name"><i><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M4 9.5h3.2L12 5.5v13l-4.8-4H4z" fill="currentColor" stroke="none"/><path d="M16 9.2a4 4 0 0 1 0 5.6M18.6 6.6a7.6 7.6 0 0 1 0 10.8"/></svg></i> Sound</div>
+      <button class="toggle" id="tg-sfx" data-on="true" aria-label="Sound"></button>
+    </div>
+    <div class="sheet-actions">
+      <button id="btn-resume">Play</button>
+      <button id="btn-quit">Quit</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ END ============ -->
+<section class="screen" id="screen-end" data-outcome="loss">
+  <div>
+    <div id="end-eyebrow">Run complete</div>
+    <h1 id="end-title">RUN OVER</h1>
+    <div id="end-reason"></div>
+    <ul id="end-breakdown"></ul>
+    <div id="end-best"></div>
+    <button id="btn-again">Dive Again</button>
+  </div>
+</section>
+
+<script type="module" src="./src/main.js"></script>
 </body>
 </html>

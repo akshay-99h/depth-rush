@@ -1,7 +1,11 @@
 # Depth Rush
 
-A one-thumb underwater survival sprint. Built for the **Meta Horizon Creator Competition: Game
-Prototype** (Survival & Resource Management genre). Three.js, HTML5, mobile portrait.
+A one-thumb underwater salvage race. Your boat is wrecked, five parts are scattered across the
+seabed, and a storm makes landfall in eight minutes. Dive, drill, surface, repair, escape.
+
+Built for the **Meta Horizon Creator Competition: Game Prototype** (Survival & Resource
+Management genre). Three.js, HTML5, mobile portrait. Structure follows `docs/lofi-game-ui.pdf`;
+see `docs/ui-design.md` for how it was interpreted.
 
 ## Run it locally
 
@@ -26,12 +30,17 @@ level, an absolute URL or network API anywhere in shipped code, or an archive ov
 ```
 index.html          entry point + HUD markup and styles (top level of the zip)
 src/config.js       every gameplay tunable — balance here, not in the systems
-src/main.js         run state machine, game loop, all systems
+src/main.js         screen flow, wiring, game loop
+src/game.js         the simulation: boat mode and dive mode on one clock
 src/world.js        scene construction + per-run level generation
-src/input.js        tap / hold / boost
+src/joystick.js     virtual stick + boost
 src/hud.js          DOM HUD bindings
+src/parts.js        the five named boat parts
+src/audio.js        runtime-synthesised SFX and drone — no audio files, no network
 src/rng.js          seeded RNG so a run can be replayed from its seed
 vendor/             Three.js r185, unminified, no CDN
+docs/ui-design.md       how the lofi was interpreted, and the visual system
+docs/lofi-game-ui.pdf   the source wireframe
 docs/design-intent.md   submission artifact (≤500 words → export to .docx)
 docs/build-log.md       submission artifact (required, not scored)
 ```
