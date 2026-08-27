@@ -56,21 +56,60 @@ card fading in beneath it.
 
 ## Visual system
 
-Flat, high-contrast, sunlight-readable — the opposite of an atmospheric underwater sim.
-Judging does not score visual polish, so the look buys legibility, not beauty.
+The world is fully lit and textured; the UI stays flat and high-contrast. Judging does not
+score visual polish, so fidelity buys *legibility and atmosphere*, never decoration.
+
+**The hard constraint shapes everything: the build may not make an external request.** No
+model files, no texture downloads, no webfonts. So every surface is drawn procedurally into
+a canvas at load (`src/textures.js`) and every object is built from profiles, lathes and
+displaced primitives (`src/world.js`).
 
 - **Palette.** Abyss `#04141c` → deep `#072430` → water `#0d3a4a` → shallow `#14586b`,
-  with foam `#7fd4d9` for the surface. The scene tint is computed from the diver's depth,
-  so descending darkens the screen continuously without a single light calculation.
+  with foam `#7fd4d9` for the surface. Scene tint is computed live from the diver's depth
+  and the storm's progress, so descending darkens the frame continuously.
 - **One accent.** Signal amber `#ffb340` is reserved for urgency and reward only — the
-  timer under 90s, oxygen under 40%, a part in hand. It never appears as decoration, so
-  when it shows up the player looks at it.
-- **Silhouette over shading.** Every material is unlit; depth comes from fog and overlap.
-  Cheap on a phone, and shapes stay readable at thumb size.
-- **Type.** System UI stack only — the build may make no external request, so no webfonts.
-  Tabular numerals everywhere a number changes.
-- **Chips.** Circular and pill controls with a translucent dark fill and a hairline foam
-  border, matching the lofi's circular affordances.
+  timer under 90s, oxygen under 40%, a part in hand. Never decoration, so when it appears
+  the player looks at it.
+- **Lighting.** A sun above the surface, a sky/seabed hemisphere so nothing goes flat black,
+  and a **point light carried by the diver**. Swimming into a dark pocket genuinely reveals
+  what is in it, and floodlight pickups widen the lamp's reach — the pickup and the lighting
+  model are the same system.
+- **Procedural textures.** Sand with ripples and grit, mottled rock with crack lines,
+  brushed marine paint with weld seams and rivets, tarnished brass for the parts, neoprene,
+  and sharkskin graded dark-dorsal to pale-belly. Value noise is blurred before tiling —
+  unblurred it produced a visible lattice across the seabed.
+- **Caustics** are a Voronoi-ridge tile, two layers scrolling at different speeds, additively
+  blended over the seabed. **Light shafts** are additive planes from the surface that fade as
+  the storm closes in.
+- **Parallax backdrop.** Distant boulders and 18 kelp fronds whose vertices sway, rooted at
+  the bed and loose at the tip. Without them the mid-water is just fog.
+- **Bubbles** stream from the regulator, faster while drilling or boosting, from a recycled
+  pool so nothing allocates per frame.
+- **UI.** System font stack, tabular numerals, translucent chips with hairline foam borders,
+  matching the lofi's circular affordances.
+
+### Swapping in a different boat
+
+`boatMesh()` in `src/world.js` is isolated for exactly this. The game only ever reads
+`boat.position` and `boat.rotation.z`, so any mesh can be returned from that function —
+scaled to roughly **5.5 units long, origin at the waterline amidships**. A loaded model
+would need to be embedded rather than fetched, to keep the no-network rule.
+
+## Minimap — "Sonar plot"
+
+Sits under the settings chip at top-left, at the world's own aspect ratio. It deliberately
+does **not** reveal where the parts are — the chevron above the tank already gives a bearing,
+and plotting the answers would delete the search. What it gives instead is:
+
+- **Memory** — a fog-of-war grid revealing everything the diver has lit up, so you can see
+  where you have already been. Floodlights widen the reveal radius, tying a third system to
+  the same pickup.
+- **Situational awareness** — sharks are plotted live as red darts whether or not you have
+  explored their area. That is the point of a sonar contact display, and it is what makes
+  the minimap worth its screen space.
+
+Rocks, tanks, fins and floodlights appear once their area has been explored. The diver pings
+with an expanding ring so the eye finds it instantly.
 
 ## Screen map
 

@@ -36,6 +36,8 @@ src/world.js        scene construction + per-run level generation
 src/joystick.js     virtual stick + boost
 src/hud.js          DOM HUD bindings
 src/parts.js        the five named boat parts
+src/textures.js     every surface, drawn into a canvas at load — no texture files
+src/minimap.js      the sonar plot: fog-of-war + live shark contacts
 src/audio.js        runtime-synthesised SFX and drone — no audio files, no network
 src/rng.js          seeded RNG so a run can be replayed from its seed
 vendor/             Three.js r185, unminified, no CDN

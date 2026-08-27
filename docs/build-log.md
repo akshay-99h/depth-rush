@@ -118,7 +118,61 @@ oxygen draining at exactly 2× while drilling. `tools/package.sh` passes.
 
 ---
 
-## Session 03 — TBD
+## Session 03 — 2026-08-27 · Fidelity pass + minimap
+
+**Goal.** The lofi-faithful build was reading as a wireframe. Raise every element to
+finished fidelity and add a minimap.
+
+**The constraint that shaped the approach.** The build may make no external request, so
+there are no model or texture files to load. Everything is generated: textures drawn into
+canvases at load (`src/textures.js`), geometry built from profiles, lathes and displaced
+primitives (`src/world.js`).
+
+**What changed.**
+- Lit rendering throughout — ACES tone mapping, a sun above the surface, a sky/seabed
+  hemisphere, and a point light carried by the diver so dark pockets genuinely need lighting.
+  Floodlight pickups now widen that lamp, so the pickup and the lighting model are one system.
+- Procedural textures: rippled sand, cracked rock, brushed marine paint with weld seams and
+  rivets, tarnished brass, neoprene, and graded sharkskin.
+- The boat is now a trawler built from a hull profile — sheer line, stem, waterline stripe
+  and boot-top, plank deck, wheelhouse with lit windows, mast, boom, stays, deck rail, and a
+  working lamp. `boatMesh()` is isolated so a different boat can be dropped in.
+- The diver has a torso, hood, mask, twin tank with a regulator hose, swept arms and kicking
+  fins driven by actual swim effort. Sharks are lathe-built spindles with gills, eyes, pectoral
+  fins and a swaying tail.
+- Caustics (scrolling Voronoi ridges), light shafts, a parallax backdrop of distant boulders,
+  18 swaying kelp fronds, and a recycled bubble pool.
+- **Minimap ("Sonar plot")** — fog-of-war of everything lit up so far, plus live shark
+  contacts. Deliberately does not plot the parts.
+- **Rocks are now solid.** The diver is pushed out along the contact normal instead of
+  swimming through the boulder they are drilling.
+
+**Fixed while verifying.**
+- *The camera let the diver leave the screen.* Dive framing used a `p.x * 0.7` parallax
+  factor, so near the world's side walls the diver drifted out of frame entirely. Now it
+  follows 1:1 and clamps to the world, with an upward bias so the diver never sits behind
+  the joystick and boost button.
+- *Value noise tiled into a visible lattice* across the seabed. Blurred before tiling.
+- *The danger vignette washed the whole frame red* — an inset box-shadow with a 90px blur
+  reached the middle of a 375px-wide screen. Replaced with a radial gradient that hugs the edges.
+- *A back wall cut a hard horizontal seam* across the surface framing; the parallax backdrop
+  replaced its purpose, so it was removed.
+- *Collision created a reachability risk* — a loose part could spawn inside a boulder and be
+  permanently unreachable. Spawns are now rejected within 2.1m of a rock, and drill contact
+  radius was widened to 1.85m because collision holds the diver ~1.32m off a boulder.
+- The world narrowed from 32m to 22m wide. At the old width the portrait camera showed 21%
+  of the map horizontally and it read sparse; the minimap now covers navigation.
+
+**Still open.** The boat is my design, not the one designed in Cowork — that asset is not on
+this machine. `boatMesh()` is isolated so it can be swapped once the file is available.
+
+**Verification.** Full win path across **20 fresh seeds: 20/20**. Zero buried spawns across
+40 seeds (parts or pickups trapped inside rocks). Shark, storm and drown end paths still
+resolve with correct scores. Sim cost 0.018 ms/frame. `tools/package.sh` passes at 449KB.
+
+---
+
+## Session 04 — TBD
 
 <!-- Template:
 **Goal.**

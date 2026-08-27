@@ -12,7 +12,7 @@ export const CONFIG = {
   world: {
     surfaceY: 0,
     seabedY: -18,
-    halfWidth: 16,
+    halfWidth: 11,
     boatX: 0,
     boatY: -0.35,
     surfaceRadius: 2.2,       // swim this close to the boat to surface
@@ -43,7 +43,8 @@ export const CONFIG = {
 
   drill: {
     seconds: 1.6,             // push the stick into a rock this long to crack it
-    contactRadius: 1.5,
+    contactRadius: 1.85,      // collision holds the diver ~1.32m off a boulder,
+                              // so contact must reach past that to register
   },
 
   repair: {

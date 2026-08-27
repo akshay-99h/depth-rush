@@ -5,6 +5,7 @@ import { Joystick } from './joystick.js';
 import { Audio } from './audio.js';
 import { Game } from './game.js';
 import { Hud } from './hud.js';
+import { Minimap } from './minimap.js';
 import { CONFIG } from './config.js';
 import { PART_COUNT } from './parts.js';
 
@@ -13,16 +14,17 @@ const $ = (id) => document.getElementById(id);
 const canvas = $('game');
 const renderer = createRenderer(canvas);
 const camera = createCamera();
-const { scene, motes } = createScene();
+const { scene, motes, caustics, shafts, kelp } = createScene();
 const audio = new Audio();
 const joystick = new Joystick($('joystick'), $('stick'), $('btn-boost'));
 const hud = new Hud();
+const minimap = new Minimap($('minimap'));
 
 const SCREENS = ['landing', 'ftux', 'boat', 'dive', 'end'];
 let screen = 'landing';
 
 const game = new Game({
-  scene, camera, motes, joystick, audio,
+  scene, camera, motes, caustics, shafts, kelp, joystick, audio, minimap,
   hooks: {
     onToast: (t) => hud.toastMessage(t),
     onMode: (mode) => { if (screen === 'boat' || screen === 'dive') showScreen(mode); },
@@ -171,7 +173,7 @@ function frame(now) {
   if (screen === 'landing') tickLoading(dt);
   if (screen === 'boat' || screen === 'dive') {
     game.update(dt);
-    if (game.state) hud.update(game);
+    if (game.state) { hud.update(game); minimap.draw(game); }
   }
   if (screen === 'end') game.updateOutro(dt);
   renderer.render(scene, camera);
@@ -184,7 +186,7 @@ requestAnimationFrame(frame);
 
 // Playtest hook: drive the sim by hand, jump screens, inspect state.
 globalThis.DepthRush = {
-  game, audio,
+  game, audio, minimap,
   screen: () => screen,
   go: showScreen,
   begin: beginRun,
