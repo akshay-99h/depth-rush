@@ -172,7 +172,47 @@ resolve with correct scores. Sim cost 0.018 ms/frame. `tools/package.sh` passes 
 
 ---
 
-## Session 04 — TBD
+## Session 04 — 2026-08-27 · Integrate the Riverside Workboat
+
+**Goal.** Replace the placeholder boat with the supplied Riverside Workboat model.
+
+**The three real problems.** The asset is a standalone orbit-camera scene, not a game object:
+1. *Orientation.* Built length-along-Z for a camera that circles it. Depth Rush is side-on to
+   the XY plane, so the whole boat now sits in an inner group yawed 90°. Everything authored
+   flat-on to an orbiting camera had to be re-aimed or it ends up edge-on and invisible — the
+   flag is yawed back to face us and stream aft, the fish turned along the view axis, the
+   fishing line re-routed off the stern.
+2. *Lighting.* The hull paint was authored under a bright grey-green sky. Against teal water
+   it rendered as a black slab. Regraded into sun-caught topsides, a boot-top stripe and
+   antifouling below the waterline, with plate seams and rust streaks.
+3. *Scale and origin.* Scaled to ~7.6m long in a 22m world, waterline at the group origin.
+
+Also dropped: the original's water plane, orbit controls, HUD. Crew trimmed four → two,
+because four idle hands on deck while the player drowns contradicts the solo-diver fiction.
+
+**Added on top.** A masthead lamp (the one bright point findable from the seabed) and a list:
+she leans by however much of her is still missing and rights herself as parts are fitted, so
+the hero asset and the progress bar say the same thing.
+
+**Fixed while verifying.**
+- *Moving the boat's origin to its waterline broke diving.* The dive entry point landed inside
+  the surfacing radius, so the diver bounced straight back aboard on every dive. Surfacing is
+  now **latched** — it only arms once the diver has actually swum clear of the hull — which is
+  robust to any future change of those two numbers.
+- *The masthead glow drew as a hard pale rectangle* over the sonar plot: the plane was created
+  without its falloff map, so an additive quad rendered at full strength. Also memoised the
+  glow texture, which was rebuilding a canvas per call.
+- *The mast and flag sat behind the sonar plot.* Moved the plot down to sit just above the
+  joystick — which is where the thumb already is in dive mode, so it reads better there anyway.
+- Gulls orbited 7m toward the camera; tightened their radius to stay around the boat.
+
+**Verification.** Dive entry no longer re-surfaces; returning to the hull still does. Full win
+path **20/20 across fresh seeds**. Shark and storm end paths resolve with correct scores. Boat
+is 163 meshes; sim cost 0.021 ms/frame. `tools/package.sh` passes.
+
+---
+
+## Session 05 — TBD
 
 <!-- Template:
 **Goal.**

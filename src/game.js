@@ -8,6 +8,7 @@ import { CONFIG } from './config.js';
 import { PARTS, PART_COUNT } from './parts.js';
 import { makeRng, randomSeed } from './rng.js';
 import { generateLevel, MESHES, PALETTE, makeDiverLamp, loadTextures } from './world.js';
+import { updateBoat } from './boat.js';
 
 const W = CONFIG.world;
 const clamp = THREE.MathUtils.clamp;
@@ -143,6 +144,7 @@ export class Game {
       repairProgress: 0,
       dives: 0,
       sharkThreat: false,
+      canSurface: false,
       sonar: null,
       outcome: null,
       reason: '',
@@ -175,9 +177,10 @@ export class Game {
     if (mode === 'dive') {
       s.dives += 1;
       // Enter the water just under the keel, tank topped off.
-      this.diver.position.set(W.boatX, W.boatY - 2.4, 0);
+      this.diver.position.set(W.boatX, W.boatY - 4.0, 0);
       s.velocity.set(0, 0);
       s.oxygen = CONFIG.oxygen.max;
+      s.canSurface = false;   // must clear the boat before surfacing counts
       this.stick.reset();
     } else {
       s.drillRock = null;
@@ -202,10 +205,6 @@ export class Game {
 
   _updateBoat(dt) {
     const s = this.state;
-    // Bob the boat so the surface never looks frozen.
-    const t = performance.now() * 0.001;
-    this.boat.position.y = W.boatY + Math.sin(t * 0.9) * 0.12;
-    this.boat.rotation.z = Math.sin(t * 0.7) * 0.03;
     this.diver.visible = false;
     this.o2Bar.visible = false;
     this.lamp.visible = false;
@@ -396,7 +395,11 @@ export class Game {
     s.sharkThreat = threat;
 
     // --- surfacing ---
-    if (Math.hypot(this.boat.position.x - p.x, this.boat.position.y - p.y) < W.surfaceRadius) {
+    // Latched: the diver enters the water inside the hull's radius, so surfacing
+    // only arms once they have actually swum clear of the boat.
+    const toBoat = Math.hypot(this.boat.position.x - p.x, this.boat.position.y - p.y);
+    if (!s.canSurface && toBoat > W.surfaceRadius * 1.35) s.canSurface = true;
+    if (s.canSurface && toBoat < W.surfaceRadius) {
       this.audio.surfaced();
       this.setMode('boat');
       this.hooks.onToast?.(s.carrying.length ? 'Aboard — fit what you found' : 'Aboard — tank refilled');
@@ -474,6 +477,7 @@ export class Game {
     this.boat.position.x = W.boatX + eased * 26;
     this.boat.position.y = W.boatY + Math.sin(this.outro * 1.6) * 0.16;
     this.boat.rotation.z = Math.sin(this.outro * 1.2) * 0.05;
+    updateBoat(this.boat, this.clock + this.outro, 0);
     this.diver.visible = false;
     this.o2Bar.visible = false;
     // Sit the boat high in frame so it stays clear of the score card below it.
@@ -556,6 +560,14 @@ export class Game {
       pos.needsUpdate = true;
     }
     this._updateBubbles(dt);
+
+    // Boat: bob with the swell, and list to starboard by however much of her is
+    // still missing. Fitting a part visibly rights her — the progress bar and
+    // the hero asset say the same thing.
+    const missing = 1 - s.installed.length / PART_COUNT;
+    this.boat.position.y = W.boatY + Math.sin(this.clock * 0.9) * 0.12;
+    this.boat.rotation.z = Math.sin(this.clock * 0.7) * 0.03 - missing * 0.055;
+    updateBoat(this.boat, this.clock, s.repairing ? 1 : 0);
 
     // Camera: framed on the boat at the surface, following the diver underwater.
     // It follows the diver 1:1 and is clamped to the world instead of using a

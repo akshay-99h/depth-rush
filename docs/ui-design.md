@@ -88,12 +88,31 @@ displaced primitives (`src/world.js`).
 - **UI.** System font stack, tabular numerals, translucent chips with hairline foam borders,
   matching the lofi's circular affordances.
 
-### Swapping in a different boat
+### The boat — Riverside Workboat
 
-`boatMesh()` in `src/world.js` is isolated for exactly this. The game only ever reads
-`boat.position` and `boat.rotation.z`, so any mesh can be returned from that function —
-scaled to roughly **5.5 units long, origin at the waterline amidships**. A loaded model
-would need to be embedded rather than fetched, to keep the no-network rule.
+The hero asset is the Riverside Workboat, adapted from a standalone orbit-camera scene into
+`src/boat.js`. Three things had to change to make it a game object rather than a turntable model:
+
+1. **Orientation.** It is built length-along-Z for a camera that orbits it. Depth Rush is a
+   side-on view of the XY plane, so the whole boat sits in an inner group yawed 90° — length
+   now runs along world X, beam runs into the screen. Anything authored flat-on to an orbiting
+   camera had to be re-aimed by hand or it ends up edge-on and invisible: the **flag** is
+   yawed back so it faces us and streams aft, the **fish** turned to lie along the view axis,
+   and the **fishing line** re-routed off the stern instead of off the starboard beam.
+2. **Scale and origin.** Scaled to ~7.6m long against a 22m-wide world, with the waterline at
+   the group origin so it sits in the surface band correctly.
+3. **Lighting.** The original hull paint (`#33302c`) was authored under a bright grey-green
+   sky. Against teal water it read as a black slab, so the paint is graded — sun-caught
+   topsides, a boot-top stripe, antifouling below the waterline — with plate seams and rust.
+
+The water, orbit controls and HUD from the original are dropped; the game supplies its own.
+The crew was **trimmed from four to two**: the fiction is one diver working a barely-crewed
+boat, and four idle hands on deck while you drown reads wrong. The two who remain idle at the
+rail and work visibly while you hold Repair. Gulls, flag and crew animate through
+`updateBoat()`, called once per frame.
+
+**She lists to starboard by however much of her is still missing**, and rights herself as parts
+are fitted — the progress bar and the hero asset say the same thing.
 
 ## Minimap — "Sonar plot"
 

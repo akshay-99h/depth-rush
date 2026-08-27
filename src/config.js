@@ -14,8 +14,8 @@ export const CONFIG = {
     seabedY: -18,
     halfWidth: 11,
     boatX: 0,
-    boatY: -0.35,
-    surfaceRadius: 2.2,       // swim this close to the boat to surface
+    boatY: 0,           // the workboat model puts its waterline at the origin
+    surfaceRadius: 3.0,   // the workboat is ~7.6m long, so the surfacing zone grew with it       // swim this close to the boat to surface
   },
 
   diver: {

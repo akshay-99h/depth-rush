@@ -233,7 +233,9 @@ export function causticsTexture() {
 }
 
 // Soft round falloff, used for bubbles, motes and light shafts.
+let GLOW = null;
 export function glowTexture() {
+  if (GLOW) return GLOW;
   const size = 128;
   const { c, ctx } = canvas(size);
   const g = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
@@ -242,7 +244,7 @@ export function glowTexture() {
   g.addColorStop(1, 'rgba(255,255,255,0)');
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, size, size);
-  const t = new THREE.CanvasTexture(c);
-  t.colorSpace = THREE.SRGBColorSpace;
-  return t;
+  GLOW = new THREE.CanvasTexture(c);
+  GLOW.colorSpace = THREE.SRGBColorSpace;
+  return GLOW;
 }

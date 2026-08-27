@@ -12,6 +12,7 @@ import {
   sandTexture, rockTexture, hullTexture, brassTexture,
   suitTexture, sharkTexture, causticsTexture, glowTexture,
 } from './textures.js';
+import { buildBoat } from './boat.js';
 
 const W = CONFIG.world;
 
@@ -230,95 +231,6 @@ const mat = {
   lit: (color, glow = 0.55) => new THREE.MeshStandardMaterial({ color, roughness: 0.4, metalness: 0.45, emissive: color, emissiveIntensity: glow }),
   glass: (color = 0x7fe4ff) => new THREE.MeshStandardMaterial({ color, roughness: 0.08, metalness: 0.2, emissive: color, emissiveIntensity: 0.5, transparent: true, opacity: 0.75 }),
 };
-
-// The salvage boat. Built from a hull profile rather than a box so the sheer
-// line and stem read correctly against the waterline.
-//
-// SWAPPING IN A DIFFERENT BOAT: replace the body of this function. Anything
-// returned is used as-is — the game only ever reads `boat.position` and
-// `boat.rotation.z`, so a loaded model can be dropped in here, scaled to about
-// 5.5 units long, with its origin at the waterline amidships.
-function boatMesh() {
-  const g = new THREE.Group();
-
-  const profile = new THREE.Shape();
-  profile.moveTo(-2.45, 0.62);
-  profile.lineTo(2.45, 0.5);
-  profile.quadraticCurveTo(3.05, 0.05, 2.42, -0.42);
-  profile.quadraticCurveTo(0.5, -1.05, -2.05, -0.66);
-  profile.lineTo(-2.45, 0.62);
-
-  const hull = new THREE.Mesh(
-    new THREE.ExtrudeGeometry(profile, { depth: 1.55, bevelEnabled: true, bevelSize: 0.07, bevelThickness: 0.07, bevelSegments: 2, curveSegments: 14 }),
-    mat.hull()
-  );
-  hull.position.z = -0.775;
-  g.add(hull);
-
-  // Waterline stripe and boot-top: the detail that makes a hull read as a boat.
-  const stripe = new THREE.Mesh(new THREE.BoxGeometry(4.9, 0.14, 1.72), mat.paint(0xd94a3d, 0.4));
-  stripe.position.set(0.05, 0.02, 0);
-  g.add(stripe);
-  const boot = new THREE.Mesh(new THREE.BoxGeometry(4.7, 0.1, 1.74), mat.paint(0x11313d, 0.6));
-  boot.position.set(0.02, -0.14, 0);
-  g.add(boot);
-
-  const deck = new THREE.Mesh(new THREE.BoxGeometry(4.8, 0.1, 1.5), mat.paint(0x9d7a4e, 0.85));
-  deck.position.set(0, 0.6, 0);
-  g.add(deck);
-
-  // Wheelhouse with lit windows.
-  const cabin = new THREE.Mesh(new THREE.BoxGeometry(1.75, 1.15, 1.25), mat.hull());
-  cabin.position.set(-0.62, 1.2, 0);
-  g.add(cabin);
-  const roof = new THREE.Mesh(new THREE.BoxGeometry(1.95, 0.12, 1.4), mat.paint(0xe8f2f1, 0.5));
-  roof.position.set(-0.62, 1.82, 0);
-  g.add(roof);
-  for (const x of [-1.35, -0.62, 0.11]) {
-    const win = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.46, 0.06), mat.glass(0xffd489));
-    win.position.set(x, 1.38, 0.63);
-    g.add(win);
-  }
-
-  // Mast, boom and stays.
-  const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.07, 2.9, 8), mat.paint(0xe8f2f1, 0.4));
-  mast.position.set(0.95, 2.05, 0);
-  g.add(mast);
-  const boom = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 1.5, 6), mat.paint(0xe8f2f1, 0.4));
-  boom.rotation.z = Math.PI / 2;
-  boom.position.set(0.35, 2.6, 0);
-  g.add(boom);
-  const rigMat = new THREE.LineBasicMaterial({ color: 0x9fb3b6 });
-  const rig = new THREE.BufferGeometry().setFromPoints([
-    new THREE.Vector3(0.95, 3.45, 0), new THREE.Vector3(2.4, 0.55, 0),
-    new THREE.Vector3(0.95, 3.45, 0), new THREE.Vector3(-2.3, 0.65, 0),
-  ]);
-  g.add(new THREE.LineSegments(rig, rigMat));
-
-  // Deck rail: stanchions plus a top rail.
-  for (let i = -4; i <= 4; i++) {
-    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.44, 6), mat.steel());
-    post.position.set(i * 0.55, 0.85, 0.72);
-    g.add(post);
-  }
-  const rail = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 4.5, 6), mat.steel());
-  rail.rotation.z = Math.PI / 2;
-  rail.position.set(0, 1.06, 0.72);
-  g.add(rail);
-
-  // Working light on the mast, a bright point in the frame at any depth.
-  const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.11, 8, 8), new THREE.MeshBasicMaterial({ color: 0xfff0c0, fog: false }));
-  lamp.position.set(0.95, 3.4, 0);
-  g.add(lamp);
-  const lampGlow = new THREE.Mesh(
-    new THREE.PlaneGeometry(1.8, 1.8),
-    new THREE.MeshBasicMaterial({ map: loadTextures().glow, color: 0xffe0a0, blending: THREE.AdditiveBlending, transparent: true, opacity: 0.5, depthWrite: false, fog: false })
-  );
-  lampGlow.position.copy(lamp.position);
-  g.add(lampGlow);
-
-  return g;
-}
 
 function diverMesh() {
   const g = new THREE.Group();
@@ -593,7 +505,7 @@ function floodlightMesh() {
 }
 
 export const MESHES = {
-  boat: boatMesh,
+  boat: buildBoat,
   diver: diverMesh,
   shark: sharkMesh,
   part: partMesh,
