@@ -1,0 +1,5 @@
+# Working files — no reason to serve them from the public demo.
+docs/
+tools/
+dist/
+README.md

@@ -48,6 +48,18 @@ docs/design-intent.md   submission artifact (≤500 words → export to .docx)
 docs/build-log.md       submission artifact (required, not scored)
 ```
 
+## Deploy (playable demo)
+
+Static site, no build step — `index.html` at the repo root is the whole app.
+
+`vercel.json` sets cache headers only: `/vendor/*` is immutable (Three.js is vendored by
+hand and never changes without a rename), `/src/*` always revalidates so playtesters never
+get stale game code. `.vercelignore` keeps `docs/`, `tools/` and the zip off the public site.
+
+The deployed build is for playtesting and the demo video. **The competition submission is
+`dist/depth-rush.zip`, not the URL** — and the deployed page makes no external request
+either, so the two stay in sync.
+
 ## Submission checklist
 
 - [x] Single `index.html` at the zip top level, unminified
