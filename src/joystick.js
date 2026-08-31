@@ -62,6 +62,50 @@ export class Stick {
   }
 }
 
+// Drag-to-look over an arbitrary surface. Reports frame deltas, which the
+// caller integrates — so it composes with a stick doing the same job.
+export class DragLook {
+  constructor(el) {
+    this.dx = 0;
+    this.dy = 0;
+    this.active = false;
+    this._id = null;
+    this._px = 0;
+    this._py = 0;
+
+    el.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      this._id = e.pointerId;
+      this.active = true;
+      this._px = e.clientX; this._py = e.clientY;
+      el.setPointerCapture?.(e.pointerId);
+    });
+    el.addEventListener('pointermove', (e) => {
+      if (!this.active || e.pointerId !== this._id) return;
+      e.preventDefault();
+      this.dx += e.clientX - this._px;
+      this.dy += e.clientY - this._py;
+      this._px = e.clientX; this._py = e.clientY;
+    });
+    const end = (e) => {
+      if (this._id !== null && e && e.pointerId !== this._id) return;
+      this.active = false; this._id = null;
+    };
+    el.addEventListener('pointerup', end);
+    el.addEventListener('pointercancel', end);
+    el.addEventListener('lostpointercapture', end);
+  }
+
+  // Read and clear. Deltas are consumed exactly once per frame.
+  take() {
+    const d = { dx: this.dx, dy: this.dy };
+    this.dx = 0; this.dy = 0;
+    return d;
+  }
+
+  reset() { this.dx = 0; this.dy = 0; this.active = false; this._id = null; }
+}
+
 // A press-and-hold button that reports its state through a callback.
 export function bindHold(el, onChange) {
   const on = (e) => { e.preventDefault(); onChange(true); };

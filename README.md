@@ -41,6 +41,7 @@ src/hud.js          DOM HUD bindings
 src/parts.js        the five named boat parts
 src/levels.js       three biomes x three dives, three objectives, progression save/load
 src/enemies.js      shark / squid / jelly — three threat models, not three reskins
+src/tilt.js         optional tilt-to-swim, same shape as a stick
 src/textures.js     every surface, drawn into a canvas at load — no texture files
 src/boat.js         the Riverside Workboat, re-aimed and rescaled for a side-on view
 src/minimap.js      the sonar plot: fog-of-war + live shark contacts

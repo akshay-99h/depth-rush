@@ -1,11 +1,12 @@
 // Screen flow and wiring. The lofi's seven screens map to five states here:
 // landing -> ftux -> boat <-> dive -> end, with settings as a modal over any of them.
 import { createRenderer, createCamera, createScene, buildEnvironment } from './world.js';
-import { Stick, bindHold, bindKeyboard } from './joystick.js';
+import { Stick, DragLook, bindHold, bindKeyboard } from './joystick.js';
 import { Audio } from './audio.js';
 import { Game } from './game.js';
 import { Hud } from './hud.js';
 import { Minimap } from './minimap.js';
+import { Tilt } from './tilt.js';
 import { CONFIG } from './config.js';
 import { LEVELS, BIOMES, applyLevel, getLevel, getBiome,
          loadProgress, saveResult, isUnlocked, firstUnplayed } from './levels.js';
@@ -20,6 +21,9 @@ const { scene, sun, ambient } = createScene();
 const audio = new Audio();
 const moveStick = new Stick($('move-stick'), $('move-stick').querySelector('.stick-knob'));
 const lookStick = new Stick($('look-stick'), $('look-stick').querySelector('.stick-knob'));
+const panStick = new Stick($('pan-stick'), $('pan-stick').querySelector('.stick-knob'));
+const boatLook = new DragLook($('boat-look'));
+const tilt = new Tilt();
 const hud = new Hud();
 const minimap = new Minimap($('minimap'));
 
@@ -27,10 +31,13 @@ const SCREENS = ['landing', 'menu', 'levels', 'ftux', 'boat', 'dive', 'end'];
 let screen = 'landing';
 
 const game = new Game({
-  scene, camera, sun, ambient, moveStick, lookStick, audio, minimap,
+  scene, camera, sun, ambient, moveStick, lookStick, panStick, boatLook, tilt, audio, minimap,
   hooks: {
     onToast: (t) => hud.toastMessage(t),
-    onMode: (mode) => { if (screen === 'boat' || screen === 'dive') showScreen(mode); },
+    onMode: (mode) => {
+      if (screen === 'boat' || screen === 'dive') showScreen(mode);
+      if (mode === 'boat') flashScoutHint();
+    },
     onEnd: (outcome, reason, state) => showEnd(outcome, reason, state),
   },
 });
@@ -38,12 +45,21 @@ const game = new Game({
 let progress = loadProgress();
 let currentLevel = getLevel(firstUnplayed(progress));
 
+let scoutHintTimer = null;
+function flashScoutHint() {
+  const el = $('scout-hint');
+  el.dataset.on = 'true';
+  clearTimeout(scoutHintTimer);
+  scoutHintTimer = setTimeout(() => { el.dataset.on = 'false'; }, 3800);
+}
+
 function showScreen(next) {
   screen = next;
   for (const id of SCREENS) $(`screen-${id}`).dataset.on = String(id === next);
   $('hud').dataset.on = String(next === 'boat' || next === 'dive');
   $('ship-progress').style.display = next === 'boat' || next === 'dive' ? '' : 'none';
   if (next !== 'dive') { moveStick.reset(); lookStick.reset(); }
+  if (next !== 'boat') { panStick.reset(); boatLook.reset(); }
 }
 
 function resize() {
@@ -93,27 +109,43 @@ $('btn-levels-back').addEventListener('click', showMenu);
 function showLevels() {
   progress = loadProgress();
   const list = $('levels-list');
+  const plural = { shark: 'sharks', squid: 'squid', jelly: 'jellies' };
+  const JOB = { salvage: 'Salvage', beacon: 'Survey', haul: 'Cargo' };
+
   list.innerHTML = BIOMES.map((b) => {
-    const rows = LEVELS.filter((l) => l.biome === b.id).map((l) => {
+    const inBiome = LEVELS.filter((l) => l.biome === b.id);
+    const done = inBiome.filter((l) => progress.cleared[l.id]).length;
+    const rows = inBiome.map((l) => {
       const unlocked = isUnlocked(l.id, progress);
+      const cleared = !!progress.cleared[l.id];
       const best = progress.best[l.id] ?? 0;
-      const depth = Math.abs(l.world.seabedY);
-      const span = l.world.halfWidth * 2;
-      const plural = { shark: 'sharks', squid: 'squid', jelly: 'jellies' };
-      const foes = l.enemies.map((e) => `${e.count} ${e.count > 1 ? plural[e.type] : e.type}`).join(' · ');
-      const job = { salvage: 'Salvage', beacon: 'Survey', haul: 'Cargo' }[l.objective];
+      const foes = l.enemies
+        .map((e) => `<span class="foe"><b>${e.count}</b> ${e.count > 1 ? plural[e.type] : e.type}</span>`)
+        .join('');
+      const mark = cleared ? '&#10003;' : unlocked ? LEVELS.indexOf(l) + 1 : '&#128274;';
       return `<button class="lvl" data-id="${l.id}" data-locked="${!unlocked}"
-                data-cleared="${!!progress.cleared[l.id]}" ${unlocked ? '' : 'disabled'}>
-        <span class="idx">${unlocked ? (progress.cleared[l.id] ? '&#10003;' : LEVELS.indexOf(l) + 1) : '&#128274;'}</span>
+                data-cleared="${cleared}" ${unlocked ? '' : 'disabled'}>
+        <span class="idx">${mark}</span>
         <span>
-          <span class="name">${l.name}</span>
-          <div class="brief">${l.brief}</div>
-          <div class="meta"><b class="job">${job}</b> &middot; ${span}m across &middot; ${depth}m deep &middot; ${l.goal} targets &middot; ${foes}</div>
+          <span class="top">
+            <span class="name">${l.name}</span>
+            <span class="job" data-job="${l.objective}">${JOB[l.objective]}</span>
+          </span>
+          <span class="brief">${l.brief}</span>
+          <span class="stats">
+            <span><b>${l.world.halfWidth * 2}m</b> across</span>
+            <span><b>${Math.abs(l.world.seabedY)}m</b> deep</span>
+            <span><b>${l.goal}</b> targets</span>
+            <span><b>${Math.floor(l.storm / 60)}:${String(l.storm % 60).padStart(2, '0')}</b> storm</span>
+            ${foes}
+          </span>
         </span>
         <span class="score">${best ? best.toLocaleString() : ''}</span>
       </button>`;
     }).join('');
-    return `<div class="biome"><h3>${b.name}</h3><p class="blurb">${b.blurb}</p>${rows}</div>`;
+    return `<div class="biome">
+      <div class="biome-head"><h3>${b.name}</h3><span class="count">${done}/${inBiome.length}</span></div>
+      <p class="blurb">${b.blurb}</p>${rows}</div>`;
   }).join('');
 
   for (const el of list.querySelectorAll('.lvl')) {
@@ -169,6 +201,7 @@ function beginRun() {
 }
 
 bindHold($('btn-boost'), (on) => { game.boostHeld = on; });
+$('btn-recentre').addEventListener('click', () => game.recentre());
 bindKeyboard(moveStick, lookStick, (on) => { game.boostHeld = on; });
 
 $('btn-dive').addEventListener('click', () => {
@@ -219,6 +252,27 @@ const bindToggle = (id, apply) => {
 };
 bindToggle('tg-music', (on) => audio.setMusic(on));
 bindToggle('tg-sfx', (on) => audio.setSfx(on));
+
+// Tilt has to be requested from inside the click on iOS, so it is wired
+// directly rather than through bindToggle.
+const tiltToggle = $('tg-tilt');
+const tiltNote = $('tilt-note');
+function paintTilt() {
+  const on = tilt.enabled && !tilt.denied;
+  tiltToggle.dataset.on = String(on);
+  $('move-stick').style.display = on ? 'none' : '';
+  tiltNote.textContent = !tilt.available
+    ? 'No motion sensor on this device.'
+    : tilt.denied ? 'Motion access was declined — allow it in your browser settings.'
+    : on ? 'Hold the phone how you like; it re-centres on each dive.'
+    : "Uses the phone's motion sensor instead of the left stick.";
+}
+tiltToggle.addEventListener('click', async () => {
+  if (tilt.enabled) tilt.disable();
+  else await tilt.enable();
+  paintTilt();
+});
+paintTilt();
 
 /* ------------------------------------------------------------------- end */
 
@@ -284,7 +338,7 @@ requestAnimationFrame(frame);
 
 // Playtest hook: drive the sim by hand, jump screens, inspect state.
 globalThis.DepthRush = {
-  game, audio, minimap, hud, moveStick, lookStick,
+  game, audio, minimap, hud, moveStick, lookStick, panStick, boatLook, tilt,
   screen: () => screen,
   levels: LEVELS,
   levelDef: () => currentLevel,   // `level` is the generated world; this is its definition

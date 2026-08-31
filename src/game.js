@@ -44,7 +44,8 @@ function aimAlong(obj, x, y, z) {
 }
 
 export class Game {
-  constructor({ scene, camera, sun, ambient, moveStick, lookStick, audio, minimap, hooks = {} }) {
+  constructor({ scene, camera, sun, ambient, moveStick, lookStick, panStick, boatLook,
+                tilt, audio, minimap, hooks = {} }) {
     this.scene = scene;
     this.camera = camera;
     this.sun = sun;
@@ -58,6 +59,9 @@ export class Game {
     this.colliders = [];
     this.move = moveStick;
     this.look = lookStick;
+    this.pan = panStick;
+    this.boatLook = boatLook;
+    this.tilt = tilt ?? null;
     this.audio = audio;
     this.minimap = minimap ?? null;
     this.hooks = hooks;
@@ -231,6 +235,11 @@ export class Game {
       camDist: CONFIG.camera.distance,
       planted: 0,
       delivered: 0,
+      // Scouting from the deck: orbit around a focus you can walk over the map.
+      boatYaw: 0.6,
+      boatPitch: 0.45,
+      panX: 0,
+      panZ: 0,
       holdKind: null,
       haulCrate: null,
     };
@@ -268,8 +277,13 @@ export class Game {
       s.yaw = 0;
       s.pitch = -0.5;
       s.canSurface = false;    // must clear the boat before surfacing counts
+      this.tilt?.calibrate();  // however they are holding the phone right now is centre
     }
     if (mode === 'boat') {
+      s.panX = 0;
+      s.panZ = 0;
+      this.pan?.reset();
+      this.boatLook?.reset();
       s.drillRock = null;
       s.drillProgress = 0;
       s.sharkThreat = false;
@@ -290,8 +304,33 @@ export class Game {
     if (!this.state.repairing) this.state.repairProgress = 0;
   }
 
+  recentre() {
+    if (!this.state) return;
+    this.state.panX = 0;
+    this.state.panZ = 0;
+  }
+
   _updateBoat(dt) {
     const s = this.state;
+    this._updateEnemies(dt, null);
+
+    // Drag anywhere to swing the view; the stick walks the focus point over the
+    // dive site so you can scout a route before you go in.
+    if (this.boatLook) {
+      const { dx, dy } = this.boatLook.take();
+      s.boatYaw -= dx * 0.006;
+      s.boatPitch = clamp(s.boatPitch - dy * 0.005, -0.25, 1.15);
+    }
+    if (this.pan && this.pan.magnitude > 0.02) {
+      const speed = 11;
+      // pan relative to where the camera is looking, not to world axes
+      const sinY = Math.sin(s.boatYaw), cosY = Math.cos(s.boatYaw);
+      const fx = -sinY, fz = -cosY;
+      s.panX += (this.pan.x * cosY + this.pan.y * fx) * speed * dt;
+      s.panZ += (this.pan.x * -sinY + this.pan.y * fz) * speed * dt;
+      s.panX = clamp(s.panX, -W.halfWidth, W.halfWidth);
+      s.panZ = clamp(s.panZ, -W.halfDepth, W.halfDepth);
+    }
     this.diver.visible = false;
     this.o2Bar.visible = false;
     this.lamp.visible = false;
@@ -347,10 +386,13 @@ export class Game {
 
     // --- hold-to-act: push into a boulder to drill it, or into an anchor to
     // plant a beacon. One gesture, one progress readout, two meanings.
-    const stickLen = this.move.magnitude;
+    // Tilt takes over from the left stick when it is live; both expose the same
+    // x / y / magnitude shape, so nothing downstream needs to know which is which.
+    const src = this.tilt?.active ? this.tilt : this.move;
+    const stickLen = src.magnitude;
     _desired.set(0, 0, 0)
-      .addScaledVector(_fwd, this.move.y)
-      .addScaledVector(_right, this.move.x);
+      .addScaledVector(_fwd, src.y)
+      .addScaledVector(_right, src.x);
     const pushing = stickLen > 0.3 && _desired.lengthSq() > 0.001;
     const aimedAt = (o, reach) => {
       const d = Math.hypot(o.x - p.x, o.y - p.y, o.z - p.z);
@@ -530,85 +572,7 @@ export class Game {
       }
     }
 
-    // --- enemies ---
-    // One loop, three threat models. Sharks hunt and kill; squid ambush and
-    // rip air out of the tank; jellies never hunt at all but sting and stall
-    // anything that drifts into them.
-    let threat = false;
-    for (const e of s.level.enemies) {
-      const spec = e.spec;
-      const dx = p.x - e.x, dy = p.y - e.y, dz = p.z - e.z;
-      const d = Math.hypot(dx, dy, dz) || 0.0001;
-      if (e.biteTimer > 0) e.biteTimer -= dt;
-
-      if (spec.detectRadius > 0 && d < spec.detectRadius) e.chaseTimer = spec.loseInterestAfter;
-      else e.chaseTimer -= dt;
-      const chasing = e.chaseTimer > 0 && spec.chaseSpeed > 0;
-
-      let wx, wy, wz;
-      if (chasing) {
-        wx = (dx / d) * spec.chaseSpeed;
-        wy = (dy / d) * spec.chaseSpeed * spec.verticalBias;
-        wz = (dz / d) * spec.chaseSpeed;
-      } else if (spec.drifts) {
-        e.heading += 0.18 * dt;
-        wx = Math.cos(e.heading) * spec.patrolSpeed * 0.6;
-        wz = Math.sin(e.heading) * spec.patrolSpeed * 0.6;
-        wy = Math.sin(this.clock * 0.4 + e.phase) * spec.patrolSpeed;
-      } else {
-        e.heading += Math.sin(this.clock * 0.3 + e.laneY) * 0.25 * dt;
-        wx = Math.cos(e.heading) * spec.patrolSpeed;
-        wz = Math.sin(e.heading) * spec.patrolSpeed;
-        wy = clamp((e.laneY - e.y) * 0.8, -1.2, 1.2);
-      }
-      const turn = Math.min(1, spec.turnRate * dt);
-      e.vx += (wx - e.vx) * turn;
-      e.vy += (wy - e.vy) * turn;
-      e.vz += (wz - e.vz) * turn;
-
-      e.x += e.vx * dt; e.y += e.vy * dt; e.z += e.vz * dt;
-      if (e.x <= -W.halfWidth || e.x >= W.halfWidth) {
-        e.x = clamp(e.x, -W.halfWidth, W.halfWidth);
-        e.vx *= -1; e.heading = Math.PI - e.heading;
-      }
-      if (e.z <= -W.halfDepth || e.z >= W.halfDepth) {
-        e.z = clamp(e.z, -W.halfDepth, W.halfDepth);
-        e.vz *= -1; e.heading = -e.heading;
-      }
-      e.y = clamp(e.y, W.seabedY + 1.0, W.surfaceY - 1.4);
-
-      if (d < spec.dangerRadius) {
-        threat = true;
-        e.dwell += dt;
-      } else {
-        // Escaping a ring you actually loitered inside is the risk bonus.
-        // Jellies do not count: nothing was hunting you.
-        if (!spec.drifts && e.dwell >= spec.closeCallDwell && !e.banked) {
-          e.banked = true;
-          s.closeCalls += 1;
-          this.audio.danger();
-          this.hooks.onToast?.('Close call +' + CONFIG.score.perCloseCall);
-        }
-        if (e.dwell > 0) { e.dwell = 0; e.banked = false; }
-      }
-
-      if (d < spec.contactRadius) {
-        if (spec.lethal) return this._end('loss', `A ${spec.label.toLowerCase()} caught you.`);
-        if (e.biteTimer <= 0) {
-          e.biteTimer = spec.biteCooldown;
-          s.oxygen = Math.max(0, s.oxygen - spec.oxygenBite);
-          if (spec.slowFactor) s.stunTimer = 1.2;
-          this.audio.danger();
-          this.hooks.onToast?.(`${spec.label} — ${spec.oxygenBite} air lost`);
-          this.hooks.onHit?.();
-        }
-      }
-
-      e.mesh.position.set(e.x, e.y, e.z);
-      if (!spec.drifts) aimAlong(e.mesh, e.vx, e.vy, e.vz);
-      animateEnemy(e, this.clock);
-    }
-    s.sharkThreat = threat;
+    if (this._updateEnemies(dt, p)) return;
 
     // --- climbing aboard ---
     const toBoat = Math.hypot(this.boat.position.x - p.x, this.boat.position.y - p.y, this.boat.position.z - p.z);
@@ -676,6 +640,91 @@ export class Game {
     m.traverse?.((n) => { n.geometry?.dispose?.(); n.material?.dispose?.(); });
     s.haulCrate.delivered = true;
     s.haulCrate = null;
+  }
+
+  // Enemies keep swimming whether or not anyone is in the water. Passing
+  // p = null means the diver is aboard: nothing to hunt, so pursuit decays and
+  // they drift back to their patrol lanes instead of parking under the hull —
+  // which is exactly what they used to do while you were on deck.
+  _updateEnemies(dt, p) {
+    const s = this.state;
+    const SH = CONFIG.shark;
+    let threat = false;
+    for (const e of s.level.enemies) {
+      const spec = e.spec;
+      const dx = p ? p.x - e.x : 0, dy = p ? p.y - e.y : 0, dz = p ? p.z - e.z : 0;
+      const d = p ? (Math.hypot(dx, dy, dz) || 0.0001) : Infinity;
+      if (e.biteTimer > 0) e.biteTimer -= dt;
+
+      if (p && spec.detectRadius > 0 && d < spec.detectRadius) e.chaseTimer = spec.loseInterestAfter;
+      else e.chaseTimer -= dt;
+      const chasing = e.chaseTimer > 0 && spec.chaseSpeed > 0;
+      let wx, wy, wz;
+      if (chasing) {
+        wx = (dx / d) * spec.chaseSpeed;
+        wy = (dy / d) * spec.chaseSpeed * spec.verticalBias;
+        wz = (dz / d) * spec.chaseSpeed;
+      } else if (spec.drifts) {
+        e.heading += 0.18 * dt;
+        wx = Math.cos(e.heading) * spec.patrolSpeed * 0.6;
+        wz = Math.sin(e.heading) * spec.patrolSpeed * 0.6;
+        wy = Math.sin(this.clock * 0.4 + e.phase) * spec.patrolSpeed;
+      } else {
+        e.heading += Math.sin(this.clock * 0.3 + e.laneY) * 0.25 * dt;
+        wx = Math.cos(e.heading) * spec.patrolSpeed;
+        wz = Math.sin(e.heading) * spec.patrolSpeed;
+        wy = clamp((e.laneY - e.y) * 0.8, -1.2, 1.2);
+      }
+      const turn = Math.min(1, spec.turnRate * dt);
+      e.vx += (wx - e.vx) * turn;
+      e.vy += (wy - e.vy) * turn;
+      e.vz += (wz - e.vz) * turn;
+
+      e.x += e.vx * dt; e.y += e.vy * dt; e.z += e.vz * dt;
+      if (e.x <= -W.halfWidth || e.x >= W.halfWidth) {
+        e.x = clamp(e.x, -W.halfWidth, W.halfWidth);
+        e.vx *= -1; e.heading = Math.PI - e.heading;
+      }
+      if (e.z <= -W.halfDepth || e.z >= W.halfDepth) {
+        e.z = clamp(e.z, -W.halfDepth, W.halfDepth);
+        e.vz *= -1; e.heading = -e.heading;
+      }
+      e.y = clamp(e.y, W.seabedY + 1.0, W.surfaceY - 1.4);
+
+      if (p && d < spec.dangerRadius) {
+        threat = true;
+        e.dwell += dt;
+      } else {
+        // Escaping a ring you actually loitered inside is the risk bonus.
+        // Jellies do not count: nothing was hunting you.
+        if (!spec.drifts && e.dwell >= spec.closeCallDwell && !e.banked) {
+          e.banked = true;
+          s.closeCalls += 1;
+          this.audio.danger();
+          this.hooks.onToast?.('Close call +' + CONFIG.score.perCloseCall);
+        }
+        if (e.dwell > 0) { e.dwell = 0; e.banked = false; }
+      }
+
+      if (p && d < spec.contactRadius) {
+        if (spec.lethal) { this._end('loss', `A ${spec.label.toLowerCase()} caught you.`); return true; }
+        if (e.biteTimer <= 0) {
+          e.biteTimer = spec.biteCooldown;
+          s.oxygen = Math.max(0, s.oxygen - spec.oxygenBite);
+          if (spec.slowFactor) s.stunTimer = 1.2;
+          this.audio.danger();
+          this.hooks.onToast?.(`${spec.label} — ${spec.oxygenBite} air lost`);
+          this.hooks.onHit?.();
+        }
+      }
+
+      e.mesh.position.set(e.x, e.y, e.z);
+      if (!spec.drifts) aimAlong(e.mesh, e.vx, e.vy, e.vz);
+      animateEnemy(e, this.clock);
+    }
+    s.sharkThreat = threat;
+    return false;
+
   }
 
   _openRock(rock) {
@@ -919,9 +968,19 @@ export class Game {
       _look.copy(p).addScaledVector(_fwd, CONFIG.camera.lookAhead);
       this.camera.lookAt(_look);
     } else {
-      _camWant.set(W.boatX - 7.5, W.boatY + 3.6, W.boatZ + 11);
+      const fx = W.boatX + s.panX, fz = W.boatZ + s.panZ;
+      const scouting = Math.hypot(s.panX, s.panZ) > 0.5;
+      const dist = 13 + Math.hypot(s.panX, s.panZ) * 0.15;
+      const cp = Math.cos(s.boatPitch);
+      _camWant.set(
+        fx + Math.sin(s.boatYaw) * cp * dist,
+        W.boatY + 1.2 + Math.sin(s.boatPitch) * dist,
+        fz + Math.cos(s.boatYaw) * cp * dist
+      );
+      _camWant.y = Math.max(_camWant.y, W.surfaceY + 1.2);
       this.camera.position.lerp(_camWant, k);
-      this.camera.lookAt(W.boatX, W.boatY + 1.1, W.boatZ);
+      _look.set(fx, W.boatY + (scouting ? -1.2 : 1.1), fz);
+      this.camera.lookAt(_look);
     }
   }
 

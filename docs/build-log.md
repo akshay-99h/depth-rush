@@ -385,7 +385,46 @@ dense kelp stand can still crowd the frame. Judged not worth the instability.
 
 ---
 
-## Session 08 — TBD
+## Session 08 — 2026-09-01 · Sharks that go home, a scouting camera, tilt, and a UI pass
+
+**The shark bug, and why it happened.** Enemies were only ticked from `_updateDive`, so the
+moment the diver climbed aboard they froze mid-pursuit — parked under the hull, waiting. The
+enemy loop is now `_updateEnemies(dt, p)` and runs in both modes; passing `p = null` means
+"nobody in the water", so pursuit decays and they ease back to their patrol lanes. Measured
+across 15 seconds on deck: chase timer 2.5 → −10.9, the shark swam 20m away and returned to
+its lane (offset 10.68m → 0.03m).
+
+**UI.** Nothing was width-constrained, so on a desktop screen the level select stretched to
+2000px with 9px text. Interactive layers are now capped at a 460px column and centred, while
+the 3D canvas stays full-bleed. Level rows were rebuilt: job pill (Salvage / Survey / Cargo,
+colour-coded), name, brief, and the level's numbers as stat chips including storm time, plus a
+per-biome cleared count.
+
+**Scouting from the deck.** Dragging anywhere on the boat screen orbits the view, and a pan
+stick walks the focus point out over the dive site so you can plan a route before going in.
+Pan is relative to the current view rather than to world axes, so "up" always means "away".
+A recentre button snaps back to the boat, and pitch is clamped so the camera cannot dip under
+the sea. The hint fades after a few seconds rather than sitting on screen permanently.
+
+**Tilt to swim.** Two sticks plus boost is a lot of thumb on a phone, so `src/tilt.js` can
+drive movement from the device's orientation instead, leaving one thumb for looking and one
+for boost. It reports the same `x / y / magnitude` shape as a Stick, so the sim takes either
+source without knowing which. It re-centres on every dive, so it does not matter how the phone
+is held; iOS needs permission, which is requested from inside the toggle's click, and the
+settings note reports unavailable/denied honestly. The left stick hides itself when tilt is on.
+
+**Fixed while verifying.** The boat status text, the scout hint and the pan stick were all
+landing on top of each other at the bottom-left. Now stacked with measured gaps (hint 561–584,
+status 600–616, stick 632–720, buttons 736–794).
+
+**Verification.** Shark returns to patrol while aboard (above). Boat drag changes both yaw and
+pitch; pan moves the focus 13m and the camera follows; recentre resets; orbit pitch clamps at
+both limits with the camera staying above water. Tilt moves the diver 3.87m with the left stick
+idle. No overlapping HUD boxes.
+
+---
+
+## Session 09 — TBD
 
 <!-- Template:
 **Goal.**
