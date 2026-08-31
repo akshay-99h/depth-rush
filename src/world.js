@@ -13,6 +13,7 @@ import {
   suitTexture, sharkTexture, causticsTexture, glowTexture,
 } from './textures.js';
 import { buildBoat } from './boat.js';
+import { enemyMesh, ENEMY_TYPES } from './enemies.js';
 
 const W = CONFIG.world;
 const D = CONFIG.depthFade;
@@ -64,106 +65,116 @@ export function createCamera() {
   return cam;
 }
 
+// The scene and its lights are made once. Everything whose size depends on the
+// level — bed, surface, caustics, shafts, kelp, boulders, motes — is built by
+// buildEnvironment() and rebuilt whenever a level with different dimensions is
+// loaded. Without that split, picking a 60m-deep dive would still render the
+// 28m one.
 export function createScene() {
-  const tex = loadTextures();
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(PALETTE.shallow);
   scene.fog = new THREE.Fog(PALETTE.shallow, D.fogNearSurface, D.fogFarSurface);
 
-  // Lights are handed back so the sim can crush them as the diver descends —
-  // the darkening is a real falloff, not a colour filter over a bright scene.
   const sun = new THREE.DirectionalLight(0xd8f6ff, D.sunSurface);
   sun.position.set(6, 40, 10);
   scene.add(sun);
   const ambient = new THREE.HemisphereLight(0x8fe3f0, 0x07202a, D.ambientSurface);
   scene.add(ambient);
 
+  return { scene, sun, ambient };
+}
+
+function disposeDeep(obj) {
+  obj.traverse?.((n) => {
+    n.geometry?.dispose?.();
+    if (Array.isArray(n.material)) n.material.forEach((m) => m.dispose?.());
+    else n.material?.dispose?.();
+  });
+}
+
+export function buildEnvironment(scene) {
+  const tex = loadTextures();
+  for (let i = scene.children.length - 1; i >= 0; i--) {
+    const c = scene.children[i];
+    if (c.userData?.env) { disposeDeep(c); scene.remove(c); }
+  }
+  const add = (o) => { o.userData.env = true; scene.add(o); return o; };
+
+  const spanX = W.halfWidth * 2, spanZ = W.halfDepth * 2;
+  const depth = Math.abs(W.seabedY);
+
   // The underside of the surface: a big bright ceiling you can always find by
   // looking up, which is what makes "swim up to breathe" legible.
-  const surface = new THREE.Mesh(
-    new THREE.PlaneGeometry(W.halfWidth * 6, W.halfDepth * 6, 24, 24),
-    new THREE.MeshBasicMaterial({ color: 0xa8ecf2, side: THREE.DoubleSide, transparent: true, opacity: 0.55, fog: true })
-  );
+  const surface = add(new THREE.Mesh(
+    new THREE.PlaneGeometry(spanX * 3, spanZ * 3, 24, 24),
+    new THREE.MeshBasicMaterial({ color: 0xa8ecf2, side: THREE.DoubleSide, transparent: true, opacity: 0.55 })
+  ));
   surface.rotation.x = -Math.PI / 2;
   surface.position.y = W.surfaceY;
-  scene.add(surface);
   const surfaceBase = surface.geometry.attributes.position.array.slice();
 
-  // Seabed.
-  const floor = new THREE.Mesh(
-    new THREE.PlaneGeometry(W.halfWidth * 4, W.halfDepth * 4, 1, 1),
+  const floor = add(new THREE.Mesh(
+    new THREE.PlaneGeometry(spanX * 2, spanZ * 2, 1, 1),
     new THREE.MeshStandardMaterial({ map: tex.sand, roughness: 0.95, metalness: 0 })
-  );
+  ));
   floor.rotation.x = -Math.PI / 2;
   floor.position.y = W.seabedY;
-  scene.add(floor);
 
-  // Caustics: two additive layers scrolling across the bed at different speeds.
   const caustics = [];
   for (let i = 0; i < 2; i++) {
-    const m = new THREE.Mesh(
-      new THREE.PlaneGeometry(W.halfWidth * 4, W.halfDepth * 4),
+    const m = add(new THREE.Mesh(
+      new THREE.PlaneGeometry(spanX * 2, spanZ * 2),
       new THREE.MeshBasicMaterial({
         map: tex.caustics.clone(), blending: THREE.AdditiveBlending,
         transparent: true, opacity: i ? 0.16 : 0.24, depthWrite: false,
       })
-    );
+    ));
     m.material.map.needsUpdate = true;
     m.rotation.x = -Math.PI / 2;
     m.position.y = W.seabedY + 0.03 + i * 0.02;
     m.userData.speed = i ? -0.014 : 0.022;
-    scene.add(m);
     caustics.push(m);
   }
 
   // Shafts of light. Crossed pairs, so they read from any camera angle.
-  const shafts = new THREE.Group();
-  const shaftH = Math.abs(W.seabedY) + 4;
-  for (let i = 0; i < 14; i++) {
+  const shafts = add(new THREE.Group());
+  const shaftH = depth + 4;
+  for (let i = 0; i < 16; i++) {
     const g = new THREE.Group();
     const wdt = 1.6 + Math.random() * 3.0;
     const mat = new THREE.MeshBasicMaterial({
       map: tex.glow, color: 0xbdf0ff, blending: THREE.AdditiveBlending,
-      transparent: true, opacity: 0.09, depthWrite: false, fog: true,
+      transparent: true, opacity: 0.09, depthWrite: false,
     });
     for (let k = 0; k < 2; k++) {
       const p = new THREE.Mesh(new THREE.PlaneGeometry(wdt, shaftH), mat);
       p.rotation.y = k * Math.PI / 2;
       g.add(p);
     }
-    g.position.set(
-      (Math.random() - 0.5) * W.halfWidth * 2.2,
-      W.surfaceY - shaftH / 2,
-      (Math.random() - 0.5) * W.halfDepth * 2.2
-    );
+    g.position.set((Math.random() - 0.5) * spanX * 1.1, W.surfaceY - shaftH / 2, (Math.random() - 0.5) * spanZ * 1.1);
     g.userData = { phase: Math.random() * Math.PI * 2, mat };
     shafts.add(g);
   }
-  scene.add(shafts);
 
   // Suspended particulate. Sprites, so they face the camera from any angle.
-  const motes = new THREE.Group();
-  for (let i = 0; i < 160; i++) {
+  const motes = add(new THREE.Group());
+  for (let i = 0; i < 170; i++) {
     const s = new THREE.Sprite(new THREE.SpriteMaterial({
       map: tex.glow, color: 0xcdf2f5, transparent: true,
       opacity: 0.10 + Math.random() * 0.2, depthWrite: false,
-      blending: THREE.AdditiveBlending, fog: true,
+      blending: THREE.AdditiveBlending,
     }));
-    s.position.set(
-      (Math.random() - 0.5) * W.halfWidth * 2.2,
-      W.seabedY + Math.random() * (Math.abs(W.seabedY) + 2),
-      (Math.random() - 0.5) * W.halfDepth * 2.2
-    );
+    s.position.set((Math.random() - 0.5) * spanX * 1.1, W.seabedY + Math.random() * (depth + 2), (Math.random() - 0.5) * spanZ * 1.1);
     const sc = 0.06 + Math.random() * 0.16;
     s.scale.set(sc, sc, 1);
     s.userData = { drift: 0.08 + Math.random() * 0.3, sway: Math.random() * Math.PI * 2 };
     motes.add(s);
   }
-  scene.add(motes);
 
   // Kelp: crossed blades rooted on the bed, so they have volume from any angle.
   const kelp = [];
-  for (let i = 0; i < 46; i++) {
+  const kelpCount = Math.round(spanX * spanZ / 22);
+  for (let i = 0; i < kelpCount; i++) {
     const h = 3.5 + Math.random() * 7;
     const geo = new THREE.PlaneGeometry(0.34 + Math.random() * 0.24, h, 1, 8);
     geo.translate(0, h / 2, 0);
@@ -171,7 +182,7 @@ export function createScene() {
       color: 0x11463f, roughness: 0.9, metalness: 0,
       side: THREE.DoubleSide, transparent: true, opacity: 0.92,
     });
-    const g = new THREE.Group();
+    const g = add(new THREE.Group());
     const blades = [];
     for (let k = 0; k < 2; k++) {
       const m = new THREE.Mesh(geo.clone(), mat);
@@ -179,41 +190,30 @@ export function createScene() {
       g.add(m);
       blades.push(m);
     }
-    g.position.set(
-      (Math.random() - 0.5) * W.halfWidth * 2,
-      W.seabedY - 0.2,
-      (Math.random() - 0.5) * W.halfDepth * 2
-    );
-    g.userData = {
-      blades,
-      base: geo.attributes.position.array.slice(),
-      height: h,
-      phase: Math.random() * Math.PI * 2,
-      amp: 0.35 + Math.random() * 0.5,
-    };
-    scene.add(g);
+    g.position.set((Math.random() - 0.5) * spanX, W.seabedY - 0.2, (Math.random() - 0.5) * spanZ);
+    g.userData.env = true;
+    g.userData.blades = blades;
+    g.userData.base = geo.attributes.position.array.slice();
+    g.userData.height = h;
+    g.userData.phase = Math.random() * Math.PI * 2;
+    g.userData.amp = 0.35 + Math.random() * 0.5;
     kelp.push(g);
   }
 
   // Scenery boulders scattered over the bed for parallax and landmarks.
-  const backdrop = new THREE.Group();
-  for (let i = 0; i < 30; i++) {
+  const backdrop = add(new THREE.Group());
+  for (let i = 0; i < Math.round(spanX * spanZ / 36); i++) {
     const s = 1.4 + Math.random() * 3.2;
     const b = new THREE.Mesh(
       new THREE.IcosahedronGeometry(s, 0),
       new THREE.MeshStandardMaterial({ color: 0x0d2a35, roughness: 1, metalness: 0 })
     );
-    b.position.set(
-      (Math.random() - 0.5) * W.halfWidth * 2.3,
-      W.seabedY + s * 0.35 - 0.6,
-      (Math.random() - 0.5) * W.halfDepth * 2.3
-    );
+    b.position.set((Math.random() - 0.5) * spanX * 1.15, W.seabedY + s * 0.35 - 0.6, (Math.random() - 0.5) * spanZ * 1.15);
     b.rotation.set(Math.random() * 3, Math.random() * 3, Math.random() * 3);
     backdrop.add(b);
   }
-  scene.add(backdrop);
 
-  return { scene, motes, caustics, shafts, kelp, backdrop, floor, surface, surfaceBase, sun, ambient };
+  return { motes, caustics, shafts, kelp, backdrop, floor, surface, surfaceBase };
 }
 
 /* ----------------------------------------------------------------- meshes */
@@ -292,68 +292,6 @@ function diverMesh() {
     fin.userData.finIndex = finIndex++;
     g.add(fin);
   }
-
-  return g;
-}
-
-function sharkMesh() {
-  const g = new THREE.Group();
-  const skin = mat.shark();
-
-  // Spindle body from a lathe profile — tapered nose and peduncle.
-  const pts = [];
-  for (let i = 0; i <= 14; i++) {
-    const t = i / 14;
-    const r = Math.sin(Math.pow(t, 0.75) * Math.PI) * 0.36 + 0.02;
-    pts.push(new THREE.Vector2(r, t * 2.6 - 1.3));
-  }
-  const body = new THREE.Mesh(new THREE.LatheGeometry(pts, 16), skin);
-  body.rotation.z = -Math.PI / 2;
-  body.scale.z = 0.82;
-  g.add(body);
-
-  const dorsal = new THREE.Mesh(new THREE.ConeGeometry(0.3, 0.62, 3), skin);
-  dorsal.scale.set(1, 1, 0.3);
-  dorsal.position.set(-0.05, 0.42, 0);
-  dorsal.rotation.z = -0.25;
-  g.add(dorsal);
-
-  for (const z of [0.26, -0.26]) {
-    const pec = new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.5, 3), skin);
-    pec.scale.set(1, 1, 0.25);
-    pec.rotation.set(0, 0, z > 0 ? -1.9 : -1.9);
-    pec.position.set(0.2, -0.2, z);
-    g.add(pec);
-  }
-
-  const tailTop = new THREE.Mesh(new THREE.ConeGeometry(0.2, 0.75, 3), skin);
-  tailTop.scale.set(1, 1, 0.3);
-  tailTop.rotation.z = -0.5;
-  tailTop.position.set(-1.35, 0.26, 0);
-  g.add(tailTop);
-  const tailBot = new THREE.Mesh(new THREE.ConeGeometry(0.14, 0.44, 3), skin);
-  tailBot.scale.set(1, 1, 0.3);
-  tailBot.rotation.z = Math.PI + 0.4;
-  tailBot.position.set(-1.32, -0.18, 0);
-  g.add(tailBot);
-
-  for (const z of [0.2, -0.2]) {
-    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.045, 8, 8), new THREE.MeshStandardMaterial({ color: 0x08131a, roughness: 0.15, metalness: 0.4 }));
-    eye.position.set(0.86, 0.08, z);
-    g.add(eye);
-  }
-  // gill slits
-  for (let i = 0; i < 5; i++) {
-    const gill = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.16, 0.02), mat.paint(0x3a4d56, 0.9));
-    gill.position.set(0.5 - i * 0.09, 0.0, 0.26);
-    gill.rotation.z = 0.25;
-    g.add(gill);
-  }
-
-  const jaw = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.05, 0.3), mat.paint(0xf1f7f6, 0.5));
-  jaw.position.set(0.85, -0.19, 0);
-  jaw.rotation.z = 0.1;
-  g.add(jaw);
 
   return g;
 }
@@ -507,7 +445,7 @@ function floodlightMesh() {
 export const MESHES = {
   boat: buildBoat,
   diver: diverMesh,
-  shark: sharkMesh,
+  enemy: enemyMesh,
   part: partMesh,
   rock: rockMesh,
   tank: tankMesh,
@@ -534,21 +472,23 @@ export function generateLevel(rng) {
     y: rng.range(W.seabedY + minUp, W.seabedY + maxUp),
     z: rng.range(-sz, sz),
   });
-  // Keep the water column directly under the boat clear so the first descent
-  // is never a wall.
   const clearOfBoat = (minUp, maxUp) => {
     let p = spot(minUp, maxUp), guard = 0;
     while (guard++ < 30 && Math.hypot(p.x - W.boatX, p.z - W.boatZ) < 4.0) p = spot(minUp, maxUp);
     return p;
   };
 
+  // Which of the five parts this level asks for, and in what order.
   const order = PARTS.map((p) => p.id);
   for (let i = order.length - 1; i > 0; i--) {
     const j = rng.int(0, i);
     [order[i], order[j]] = [order[j], order[i]];
   }
-  const sealed = order.slice(0, CONFIG.spawn.partsInRocks);
-  const loose = order.slice(CONFIG.spawn.partsInRocks);
+  const wanted = Math.max(1, Math.min(PARTS.length, CONFIG.parts?.count ?? PARTS.length));
+  const activeParts = order.slice(0, wanted);
+  const sealedCount = Math.min(CONFIG.spawn.partsInRocks, wanted);
+  const sealed = activeParts.slice(0, sealedCount);
+  const loose = activeParts.slice(sealedCount);
 
   const rocks = [];
   for (let i = 0; i < CONFIG.spawn.rocks; i++) {
@@ -557,10 +497,11 @@ export function generateLevel(rng) {
   }
 
   // Rocks are solid, so nothing may spawn inside one.
+  const band = Math.max(4, Math.abs(W.seabedY) * 0.6);
   const clearOfRocks = () => {
-    let p = clearOfBoat(0.9, Math.abs(W.seabedY) * 0.55), guard = 0;
+    let p = clearOfBoat(0.9, band), guard = 0;
     while (guard++ < 40 && rocks.some((r) => Math.hypot(r.x - p.x, r.y - p.y, r.z - p.z) < 2.6)) {
-      p = clearOfBoat(0.9, Math.abs(W.seabedY) * 0.55);
+      p = clearOfBoat(0.9, band);
     }
     return p;
   };
@@ -573,25 +514,33 @@ export function generateLevel(rng) {
   add('fins', CONFIG.spawn.fins);
   add('light', CONFIG.spawn.floodlights);
 
-  // One shark per depth band, spread across the volume.
-  const sharks = [];
+  // Enemies, spread one per depth band so the column is never empty or stacked.
+  const roster = [];
+  for (const entry of (CONFIG.enemies ?? [{ type: 'shark', count: 2 }])) {
+    for (let i = 0; i < entry.count; i++) roster.push(entry.type);
+  }
+  const enemies = [];
   const top = W.surfaceY - 4, bot = W.seabedY + 3;
-  const band = (top - bot) / CONFIG.shark.count;
-  for (let i = 0; i < CONFIG.shark.count; i++) {
-    const laneY = rng.range(bot + band * i, bot + band * (i + 1));
+  const slice = (top - bot) / Math.max(1, roster.length);
+  roster.forEach((type, i) => {
+    const spec = ENEMY_TYPES[type] ?? ENEMY_TYPES.shark;
+    const laneY = rng.range(bot + slice * i, bot + slice * (i + 1));
     const heading = rng.range(0, Math.PI * 2);
-    sharks.push({
+    enemies.push({
+      type, spec,
       x: rng.range(-sx, sx), y: laneY, z: rng.range(-sz, sz),
       laneY,
-      vx: Math.cos(heading) * CONFIG.shark.patrolSpeed,
+      vx: Math.cos(heading) * spec.patrolSpeed,
       vy: 0,
-      vz: Math.sin(heading) * CONFIG.shark.patrolSpeed,
+      vz: Math.sin(heading) * spec.patrolSpeed,
       heading,
       chaseTimer: 0,
       dwell: 0,
       banked: false,
+      biteTimer: 0,
+      phase: rng.range(0, Math.PI * 2),
     });
-  }
+  });
 
-  return { rocks, parts, pickups, sharks };
+  return { rocks, parts, pickups, enemies, activeParts };
 }

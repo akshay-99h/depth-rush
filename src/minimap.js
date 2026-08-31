@@ -105,10 +105,10 @@ export class Minimap {
     }
 
     // live threat contacts — plotted whether or not you have swept there
-    for (const e of s.level.sharks) {
+    for (const e of s.level.enemies) {
       const px = toX(e.x), pz = toZ(e.z);
       const a = Math.atan2(e.vz ?? 0, e.vx ?? 1);
-      ctx.fillStyle = '#ff4d5e';
+      ctx.fillStyle = e.spec?.plot ?? '#ff4d5e';
       ctx.beginPath();
       ctx.moveTo(px + Math.cos(a) * r * 2.1, pz + Math.sin(a) * r * 2.1);
       ctx.lineTo(px + Math.cos(a + 2.5) * r * 1.5, pz + Math.sin(a + 2.5) * r * 1.5);
@@ -156,9 +156,11 @@ export class Minimap {
       ctx.fillStyle = '#35d6c4';
       ctx.fillRect(gx0, dy - 1.5, gutter, 3);
     }
-    for (const e of s.level.sharks) {
-      ctx.fillStyle = 'rgba(255,77,94,0.75)';
-      ctx.fillRect(gx0 + gutter * 0.3, depthOf(e.y) - 1, gutter * 0.4, 2);
+    for (const e of s.level.enemies) {
+      ctx.fillStyle = e.spec?.plot ?? '#ff4d5e';
+      ctx.globalAlpha = 0.8;
+      ctx.fillRect(gx0 + gutter * 0.28, depthOf(e.y) - 1, gutter * 0.44, 2);
+      ctx.globalAlpha = 1;
     }
   }
 }

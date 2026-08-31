@@ -10,8 +10,11 @@ see `docs/ui-design.md` for how it was interpreted.
 ## Run it locally
 
 ```
-python3 -m http.server 5173
+python3 tools/serve.py 5173 .
 ```
+
+(`tools/serve.py` disables caching. Plain `http.server` lets browsers heuristically cache
+ES modules, which shows up as a bogus "does not provide an export named X" after an edit.)
 
 Then open <http://localhost:5173> — use your browser's device toolbar in portrait to play it as
 intended. ES modules need a server; opening `index.html` from the filesystem will not work.
@@ -36,6 +39,8 @@ src/world.js        scene construction + per-run level generation
 src/joystick.js     virtual stick + boost
 src/hud.js          DOM HUD bindings
 src/parts.js        the five named boat parts
+src/levels.js       three biomes x three dives, plus progression save/load
+src/enemies.js      shark / squid / jelly — three threat models, not three reskins
 src/textures.js     every surface, drawn into a canvas at load — no texture files
 src/boat.js         the Riverside Workboat, re-aimed and rescaled for a side-on view
 src/minimap.js      the sonar plot: fog-of-war + live shark contacts

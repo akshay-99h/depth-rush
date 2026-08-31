@@ -1,38 +1,42 @@
 // Screen flow and wiring. The lofi's seven screens map to five states here:
 // landing -> ftux -> boat <-> dive -> end, with settings as a modal over any of them.
-import { createRenderer, createCamera, createScene } from './world.js';
+import { createRenderer, createCamera, createScene, buildEnvironment } from './world.js';
 import { Stick, bindHold, bindKeyboard } from './joystick.js';
 import { Audio } from './audio.js';
 import { Game } from './game.js';
 import { Hud } from './hud.js';
 import { Minimap } from './minimap.js';
 import { CONFIG } from './config.js';
-import { PART_COUNT } from './parts.js';
+import { LEVELS, BIOMES, applyLevel, getLevel, getBiome,
+         loadProgress, saveResult, isUnlocked, firstUnplayed } from './levels.js';
+
 
 const $ = (id) => document.getElementById(id);
 
 const canvas = $('game');
 const renderer = createRenderer(canvas);
 const camera = createCamera();
-const { scene, motes, caustics, shafts, kelp, sun, ambient, surface, surfaceBase } = createScene();
+const { scene, sun, ambient } = createScene();
 const audio = new Audio();
 const moveStick = new Stick($('move-stick'), $('move-stick').querySelector('.stick-knob'));
 const lookStick = new Stick($('look-stick'), $('look-stick').querySelector('.stick-knob'));
 const hud = new Hud();
 const minimap = new Minimap($('minimap'));
 
-const SCREENS = ['landing', 'ftux', 'boat', 'dive', 'end'];
+const SCREENS = ['landing', 'menu', 'levels', 'ftux', 'boat', 'dive', 'end'];
 let screen = 'landing';
 
 const game = new Game({
-  scene, camera, motes, caustics, shafts, kelp, sun, ambient, surface, surfaceBase,
-  moveStick, lookStick, audio, minimap,
+  scene, camera, sun, ambient, moveStick, lookStick, audio, minimap,
   hooks: {
     onToast: (t) => hud.toastMessage(t),
     onMode: (mode) => { if (screen === 'boat' || screen === 'dive') showScreen(mode); },
     onEnd: (outcome, reason, state) => showEnd(outcome, reason, state),
   },
 });
+
+let progress = loadProgress();
+let currentLevel = getLevel(firstUnplayed(progress));
 
 function showScreen(next) {
   screen = next;
@@ -53,17 +57,86 @@ addEventListener('orientationchange', resize);
 
 /* --------------------------------------------------------------- landing */
 
-let loadProgress = 0;
+let loadBar = 0;   // renamed: `loadProgress` is now the saved-progress import
 function tickLoading(dt) {
-  loadProgress = Math.min(1, loadProgress + dt * 0.85);
-  $('load-fill').style.width = `${loadProgress * 100}%`;
-  if (loadProgress >= 1) {
+  loadBar = Math.min(1, loadBar + dt * 0.85);
+  $('load-fill').style.width = `${loadBar * 100}%`;
+  if (loadBar >= 1) {
     $('load-label').textContent = 'Tap to begin';
     $('screen-landing').onclick = () => {
       audio.unlock();
       $('screen-landing').onclick = null;
-      startFtux();
+      showMenu();
     };
+  }
+}
+
+/* ------------------------------------------------------------------ menu */
+
+function showMenu() {
+  progress = loadProgress();
+  const cleared = Object.keys(progress.cleared).length;
+  $('menu-note').textContent = cleared
+    ? `${cleared} of ${LEVELS.length} dives cleared`
+    : 'Nine dives across three biomes';
+  showScreen('menu');
+}
+
+$('btn-play').addEventListener('click', () => {
+  audio.unlock();
+  startLevel(getLevel(firstUnplayed(progress)));
+});
+$('btn-levels').addEventListener('click', () => { audio.unlock(); showLevels(); });
+$('btn-menu-settings').addEventListener('click', openSettings);
+$('btn-levels-back').addEventListener('click', showMenu);
+
+function showLevels() {
+  progress = loadProgress();
+  const list = $('levels-list');
+  list.innerHTML = BIOMES.map((b) => {
+    const rows = LEVELS.filter((l) => l.biome === b.id).map((l) => {
+      const unlocked = isUnlocked(l.id, progress);
+      const best = progress.best[l.id] ?? 0;
+      const depth = Math.abs(l.world.seabedY);
+      const span = l.world.halfWidth * 2;
+      const plural = { shark: 'sharks', squid: 'squid', jelly: 'jellies' };
+      const foes = l.enemies.map((e) => `${e.count} ${e.count > 1 ? plural[e.type] : e.type}`).join(' · ');
+      return `<button class="lvl" data-id="${l.id}" data-locked="${!unlocked}"
+                data-cleared="${!!progress.cleared[l.id]}" ${unlocked ? '' : 'disabled'}>
+        <span class="idx">${unlocked ? (progress.cleared[l.id] ? '&#10003;' : LEVELS.indexOf(l) + 1) : '&#128274;'}</span>
+        <span>
+          <span class="name">${l.name}</span>
+          <div class="brief">${l.brief}</div>
+          <div class="meta">${span}m across &middot; ${depth}m deep &middot; ${l.parts} parts &middot; ${foes}</div>
+        </span>
+        <span class="score">${best ? best.toLocaleString() : ''}</span>
+      </button>`;
+    }).join('');
+    return `<div class="biome"><h3>${b.name}</h3><p class="blurb">${b.blurb}</p>${rows}</div>`;
+  }).join('');
+
+  for (const el of list.querySelectorAll('.lvl')) {
+    el.addEventListener('click', () => {
+      if (el.dataset.locked === 'true') return;
+      audio.unlock();
+      startLevel(getLevel(el.dataset.id));
+    });
+  }
+  showScreen('levels');
+}
+
+// Applying a level rewrites the shared CONFIG, so the minimap grid and the
+// scene both have to be rebuilt around the new dimensions before the run.
+function startLevel(level) {
+  currentLevel = level;
+  applyLevel(level);
+  game.setEnvironment(buildEnvironment(scene));
+  minimap.rebuild();
+  if (!localStorage.getItem('depthrush.seenFtux')) {
+    try { localStorage.setItem('depthrush.seenFtux', '1'); } catch { /* private mode */ }
+    startFtux();
+  } else {
+    beginRun();
   }
 }
 
@@ -91,6 +164,7 @@ function beginRun() {
   ftuxTimers = [];
   game.startRun();
   showScreen('boat');
+  hud.toastMessage(`${getBiome(currentLevel.biome).name} — ${currentLevel.name}`);
 }
 
 bindHold($('btn-boost'), (on) => { game.boostHeld = on; });
@@ -126,8 +200,12 @@ $('btn-settings').addEventListener('click', openSettings);
 $('btn-resume').addEventListener('click', closeSettings);
 $('btn-quit').addEventListener('click', () => {
   closeSettings();
-  game.state.outcome = null;
-  game._end('loss', 'You abandoned the boat.');
+  if (screen === 'boat' || screen === 'dive') {
+    game.state.outcome = null;
+    game._end('loss', 'You abandoned the boat.');
+  } else {
+    showMenu();
+  }
 });
 
 const bindToggle = (id, apply) => {
@@ -147,12 +225,13 @@ function showEnd(outcome, reason, s) {
   showScreen('end');
   const el = $('screen-end');
   el.dataset.outcome = outcome;
-  $('end-eyebrow').textContent = outcome === 'win' ? 'Off to shore' : 'Run over';
+  $('end-eyebrow').textContent = outcome === 'win'
+    ? `Off to shore — ${currentLevel.name}` : `Run over — ${currentLevel.name}`;
   $('end-title').textContent = outcome === 'win' ? 'YOU MADE IT' : 'RUN OVER';
   $('end-reason').textContent = reason;
 
   const rows = [
-    ['Parts fitted', `${s.installed.length}/${PART_COUNT}`, s.breakdown.parts],
+    ['Parts fitted', `${s.installed.length}/${game.partsTotal}`, s.breakdown.parts],
     ['Close calls', `${s.closeCalls}`, s.breakdown.closeCalls],
     ['Time to spare', outcome === 'win' ? `${Math.round(s.timeLeft)}s` : '—', s.breakdown.escape],
   ];
@@ -165,13 +244,14 @@ function showEnd(outcome, reason, s) {
     `<li><span>${label} · ${detail}</span><b>${value.toLocaleString()}</b></li>`
   ).join('') + `<li class="total"><span>Score</span><b>${s.score.toLocaleString()}</b></li>`;
 
-  const best = Math.max(s.score, Number(localStorage.getItem('depthrush.best') || 0));
-  localStorage.setItem('depthrush.best', String(best));
-  $('end-best').textContent = `Best ${best.toLocaleString()}`;
+  progress = saveResult(currentLevel.id, outcome, s.score);
+  const best = progress.best[currentLevel.id] ?? s.score;
+  $('end-best').textContent = `${currentLevel.name} — best ${best.toLocaleString()}`;
   $('btn-again').textContent = outcome === 'win' ? 'Dive Again' : 'Retry';
 }
 
-$('btn-again').addEventListener('click', beginRun);
+$('btn-again').addEventListener('click', () => startLevel(currentLevel));
+$('btn-end-levels').addEventListener('click', showLevels);
 
 /* ------------------------------------------------------------------ loop */
 
@@ -190,6 +270,12 @@ function frame(now) {
   requestAnimationFrame(frame);
 }
 
+// Seed the default level so the first frames have a world to draw before the
+// player has picked anything.
+applyLevel(currentLevel);
+game.setEnvironment(buildEnvironment(scene));
+minimap.rebuild();
+
 resize();
 showScreen('landing');
 requestAnimationFrame(frame);
@@ -198,6 +284,10 @@ requestAnimationFrame(frame);
 globalThis.DepthRush = {
   game, audio, minimap, hud, moveStick, lookStick,
   screen: () => screen,
+  levels: LEVELS,
+  levelDef: () => currentLevel,   // `level` is the generated world; this is its definition
+  startLevel: (id) => startLevel(getLevel(id)),
+  showLevels, showMenu,
   go: showScreen,
   begin: beginRun,
   step: (dt = 1 / 60, n = 1) => { for (let i = 0; i < n; i++) game.update(dt); return globalThis.DepthRush.state; },

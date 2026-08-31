@@ -10,10 +10,11 @@
 // ascend/descend control to learn.
 import * as THREE from '../vendor/three.module.js';
 import { CONFIG } from './config.js';
-import { PARTS, PART_COUNT } from './parts.js';
+import { PARTS } from './parts.js';
 import { makeRng, randomSeed } from './rng.js';
 import { generateLevel, MESHES, PALETTE, makeDiverLamp, loadTextures } from './world.js';
 import { updateBoat } from './boat.js';
+import { animateEnemy } from './enemies.js';
 
 const W = CONFIG.world;
 const DF = CONFIG.depthFade;
@@ -42,18 +43,17 @@ function aimAlong(obj, x, y, z) {
 }
 
 export class Game {
-  constructor({ scene, camera, motes, caustics, shafts, kelp, sun, ambient, surface, surfaceBase,
-                moveStick, lookStick, audio, minimap, hooks = {} }) {
+  constructor({ scene, camera, sun, ambient, moveStick, lookStick, audio, minimap, hooks = {} }) {
     this.scene = scene;
     this.camera = camera;
-    this.motes = motes;
-    this.caustics = caustics ?? [];
-    this.shafts = shafts?.children ?? [];
-    this.kelp = kelp ?? [];
     this.sun = sun;
     this.ambient = ambient;
-    this.surface = surface;
-    this.surfaceBase = surfaceBase;
+    this.motes = new THREE.Group();
+    this.caustics = [];
+    this.shafts = [];
+    this.kelp = [];
+    this.surface = null;
+    this.surfaceBase = null;
     this.move = moveStick;
     this.look = lookStick;
     this.audio = audio;
@@ -100,6 +100,16 @@ export class Game {
     this.paused = false;
     this.outro = null;
     this.clock = 0;
+  }
+
+  // Swapped in whenever a level with different dimensions is loaded.
+  setEnvironment(env) {
+    this.motes = env.motes;
+    this.caustics = env.caustics ?? [];
+    this.shafts = env.shafts?.children ?? [];
+    this.kelp = env.kelp ?? [];
+    this.surface = env.surface;
+    this.surfaceBase = env.surfaceBase;
   }
 
   // Exhaust bubbles, from a recycled pool — no allocation per frame.
@@ -156,7 +166,7 @@ export class Game {
     level.rocks.forEach((r) => place(r, MESHES.rock(r.shape)));
     level.parts.forEach((p) => place(p, MESHES.part(p.id)));
     level.pickups.forEach((p) => place(p, MESHES[p.kind]()));
-    level.sharks.forEach((s) => place(s, MESHES.shark()));
+    level.enemies.forEach((e) => place(e, MESHES.enemy(e.type)));
 
     this.state = {
       seed,
@@ -181,6 +191,7 @@ export class Game {
       repairProgress: 0,
       dives: 0,
       sharkThreat: false,
+      stunTimer: 0,
       breathing: false,
       canSurface: false,
       sonar: null,
@@ -256,7 +267,7 @@ export class Game {
         s.repairProgress = 0;
         this.audio.installed();
         this.hooks.onToast?.(`${PARTS.find((p) => p.id === id).label} fitted`);
-        if (s.installed.length >= PART_COUNT) return this._end('win', 'The boat sails.');
+        if (s.installed.length >= this.partsTotal) return this._end('win', 'The boat sails.');
         if (!s.carrying.length) this.setRepairing(false);
       }
     } else {
@@ -325,9 +336,11 @@ export class Game {
     }
 
     // --- movement, relative to where you are looking ---
+    if (s.stunTimer > 0) s.stunTimer -= dt;
     const speed = CONFIG.diver.speed
       * (1 + s.finStacks * CONFIG.fins.speedBonus)
-      * (s.boosting ? CONFIG.boost.speedMultiplier : 1);
+      * (s.boosting ? CONFIG.boost.speedMultiplier : 1)
+      * (s.stunTimer > 0 ? 0.45 : 1);
     if (_desired.lengthSq() > 1) _desired.normalize();
     _desired.multiplyScalar(speed);
     if (drilling) _desired.multiplyScalar(0.12);          // hold station on the rock
@@ -418,62 +431,83 @@ export class Game {
       }
     }
 
-    // --- sharks ---
-    const SH = CONFIG.shark;
+    // --- enemies ---
+    // One loop, three threat models. Sharks hunt and kill; squid ambush and
+    // rip air out of the tank; jellies never hunt at all but sting and stall
+    // anything that drifts into them.
     let threat = false;
-    for (const shark of s.level.sharks) {
-      const dx = p.x - shark.x, dy = p.y - shark.y, dz = p.z - shark.z;
+    for (const e of s.level.enemies) {
+      const spec = e.spec;
+      const dx = p.x - e.x, dy = p.y - e.y, dz = p.z - e.z;
       const d = Math.hypot(dx, dy, dz) || 0.0001;
+      if (e.biteTimer > 0) e.biteTimer -= dt;
 
-      if (d < SH.detectRadius) shark.chaseTimer = SH.loseInterestAfter;
-      else shark.chaseTimer -= dt;
-      const chasing = shark.chaseTimer > 0;
+      if (spec.detectRadius > 0 && d < spec.detectRadius) e.chaseTimer = spec.loseInterestAfter;
+      else e.chaseTimer -= dt;
+      const chasing = e.chaseTimer > 0 && spec.chaseSpeed > 0;
 
       let wx, wy, wz;
       if (chasing) {
-        wx = (dx / d) * SH.chaseSpeed;
-        wy = (dy / d) * SH.chaseSpeed * 0.8;
-        wz = (dz / d) * SH.chaseSpeed;
+        wx = (dx / d) * spec.chaseSpeed;
+        wy = (dy / d) * spec.chaseSpeed * spec.verticalBias;
+        wz = (dz / d) * spec.chaseSpeed;
+      } else if (spec.drifts) {
+        e.heading += 0.18 * dt;
+        wx = Math.cos(e.heading) * spec.patrolSpeed * 0.6;
+        wz = Math.sin(e.heading) * spec.patrolSpeed * 0.6;
+        wy = Math.sin(this.clock * 0.4 + e.phase) * spec.patrolSpeed;
       } else {
-        shark.heading += Math.sin(this.clock * 0.3 + shark.laneY) * 0.25 * dt;
-        wx = Math.cos(shark.heading) * SH.patrolSpeed;
-        wz = Math.sin(shark.heading) * SH.patrolSpeed;
-        wy = clamp((shark.laneY - shark.y) * 0.8, -1.2, 1.2);
+        e.heading += Math.sin(this.clock * 0.3 + e.laneY) * 0.25 * dt;
+        wx = Math.cos(e.heading) * spec.patrolSpeed;
+        wz = Math.sin(e.heading) * spec.patrolSpeed;
+        wy = clamp((e.laneY - e.y) * 0.8, -1.2, 1.2);
       }
-      const turn = Math.min(1, SH.turnRate * dt);
-      shark.vx += (wx - shark.vx) * turn;
-      shark.vy += (wy - shark.vy) * turn;
-      shark.vz += (wz - shark.vz) * turn;
+      const turn = Math.min(1, spec.turnRate * dt);
+      e.vx += (wx - e.vx) * turn;
+      e.vy += (wy - e.vy) * turn;
+      e.vz += (wz - e.vz) * turn;
 
-      shark.x += shark.vx * dt;
-      shark.y += shark.vy * dt;
-      shark.z += shark.vz * dt;
-      if (shark.x <= -W.halfWidth || shark.x >= W.halfWidth) {
-        shark.x = clamp(shark.x, -W.halfWidth, W.halfWidth);
-        shark.vx *= -1; shark.heading = Math.PI - shark.heading;
+      e.x += e.vx * dt; e.y += e.vy * dt; e.z += e.vz * dt;
+      if (e.x <= -W.halfWidth || e.x >= W.halfWidth) {
+        e.x = clamp(e.x, -W.halfWidth, W.halfWidth);
+        e.vx *= -1; e.heading = Math.PI - e.heading;
       }
-      if (shark.z <= -W.halfDepth || shark.z >= W.halfDepth) {
-        shark.z = clamp(shark.z, -W.halfDepth, W.halfDepth);
-        shark.vz *= -1; shark.heading = -shark.heading;
+      if (e.z <= -W.halfDepth || e.z >= W.halfDepth) {
+        e.z = clamp(e.z, -W.halfDepth, W.halfDepth);
+        e.vz *= -1; e.heading = -e.heading;
       }
-      shark.y = clamp(shark.y, W.seabedY + 1.0, W.surfaceY - 1.6);
+      e.y = clamp(e.y, W.seabedY + 1.0, W.surfaceY - 1.4);
 
-      if (d < SH.dangerRadius) {
+      if (d < spec.dangerRadius) {
         threat = true;
-        shark.dwell += dt;
-        if (d < SH.catchRadius) return this._end('loss', 'A shark caught you.');
+        e.dwell += dt;
       } else {
-        if (shark.dwell >= SH.closeCallDwell && !shark.banked) {
-          shark.banked = true;
+        // Escaping a ring you actually loitered inside is the risk bonus.
+        // Jellies do not count: nothing was hunting you.
+        if (!spec.drifts && e.dwell >= spec.closeCallDwell && !e.banked) {
+          e.banked = true;
           s.closeCalls += 1;
           this.audio.danger();
           this.hooks.onToast?.('Close call +' + CONFIG.score.perCloseCall);
         }
-        if (shark.dwell > 0) { shark.dwell = 0; shark.banked = false; }
+        if (e.dwell > 0) { e.dwell = 0; e.banked = false; }
       }
 
-      shark.mesh.position.set(shark.x, shark.y, shark.z);
-      aimAlong(shark.mesh, shark.vx, shark.vy, shark.vz);
+      if (d < spec.contactRadius) {
+        if (spec.lethal) return this._end('loss', `A ${spec.label.toLowerCase()} caught you.`);
+        if (e.biteTimer <= 0) {
+          e.biteTimer = spec.biteCooldown;
+          s.oxygen = Math.max(0, s.oxygen - spec.oxygenBite);
+          if (spec.slowFactor) s.stunTimer = 1.2;
+          this.audio.danger();
+          this.hooks.onToast?.(`${spec.label} — ${spec.oxygenBite} air lost`);
+          this.hooks.onHit?.();
+        }
+      }
+
+      e.mesh.position.set(e.x, e.y, e.z);
+      if (!spec.drifts) aimAlong(e.mesh, e.vx, e.vy, e.vz);
+      animateEnemy(e, this.clock);
     }
     s.sharkThreat = threat;
 
@@ -700,7 +734,7 @@ export class Game {
     this._updateFlyups(dt);
 
     // --- boat: bob, and list by however much of her is still missing ---
-    const missing = 1 - s.installed.length / PART_COUNT;
+    const missing = 1 - s.installed.length / Math.max(1, this.partsTotal);
     this.boat.position.y = W.boatY + Math.sin(this.clock * 0.9) * 0.12;
     this.boat.rotation.z = Math.sin(this.clock * 0.7) * 0.03 - missing * 0.055;
     updateBoat(this.boat, this.clock, s.repairing ? 1 : 0);
@@ -726,9 +760,14 @@ export class Game {
 
   /* ------------------------------------------------------------- readouts */
 
+  get partsTotal() {
+    return this.state?.level?.activeParts?.length ?? PARTS.length;
+  }
+
   get checklist() {
     const s = this.state;
-    return PARTS.map((p) => ({
+    const active = new Set(s.level.activeParts);
+    return PARTS.filter((p) => active.has(p.id)).map((p) => ({
       ...p,
       state: s.installed.includes(p.id) ? 'installed'
         : s.carrying.includes(p.id) ? 'carried'

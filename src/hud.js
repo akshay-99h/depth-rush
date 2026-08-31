@@ -1,7 +1,7 @@
 // DOM bindings for the persistent HUD. Nothing here decides anything — it only
 // renders whatever the sim already computed.
 import { CONFIG } from './config.js';
-import { PART_COUNT } from './parts.js';
+
 
 const $ = (id) => document.getElementById(id);
 
@@ -14,6 +14,7 @@ export class Hud {
     this.checklistItems = $('checklist-items');
     this.clInstalled = $('cl-installed');
     this.clCarry = $('cl-carry');
+    this.clTotal = document.querySelector('#checklist-count .cl-total');
     this.boost = $('btn-boost');
     this.vignette = $('danger-vignette');
     this.hint = $('dive-hint');
@@ -48,12 +49,14 @@ export class Hud {
     this.timerWrap.dataset.late = t <= CONFIG.run.criticalSeconds ? 'critical'
       : t <= CONFIG.run.lateGameSeconds ? 'true' : 'false';
 
-    this.shipFill.style.width = `${(s.installed.length / PART_COUNT) * 100}%`;
+    const total = game.partsTotal;
+    this.shipFill.style.width = `${(s.installed.length / Math.max(1, total)) * 100}%`;
 
     const items = game.checklist;
     // Fitted is the number that matters, but carrying has to register too —
     // otherwise recovering a part looks like nothing happened.
     this.clInstalled.textContent = `${s.installed.length}`;
+    this.clTotal.textContent = `/${total}`;
     this.clCarry.textContent = s.carrying.length ? `+${s.carrying.length}` : '';
     const sig = items.map((i) => i.state).join('|');
     if (sig !== this._checklistSig) {
@@ -89,7 +92,7 @@ export class Hud {
       const carried = s.carrying.length;
       this.boatStatus.innerHTML = carried
         ? `Carrying <b>${carried}</b> part${carried === 1 ? '' : 's'} — hold Repair to fit ${carried === 1 ? 'it' : 'them'}`
-        : s.installed.length >= PART_COUNT ? 'The boat is whole.'
+        : s.installed.length >= total ? 'The boat is whole.'
         : 'Nothing aboard. Dive for the next part.';
     }
   }

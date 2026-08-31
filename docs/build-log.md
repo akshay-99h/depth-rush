@@ -267,7 +267,74 @@ Worth watching in a human playtest before touching the 8 minutes the FTUX copy p
 
 ---
 
-## Session 06 — TBD
+## Session 06 — 2026-09-01 · 3D port, then levels
+
+Two large asks in one session. Committed separately so the 3D port stands on its own.
+
+### Part 1 — from a 2.5D plane to a 3D volume
+
+**Controls.** Left stick swims relative to where you are looking; a right-hand **eye stick**
+turns the head. Swimming follows pitch, so looking down and pushing forward takes you down —
+no separate ascend control to learn. Boost moved between the two sticks.
+
+**Rebuilt in three axes.** Movement, collision, spawning, drilling and enemy steering. Models
+aim down a direction vector through one shared `aimAlong()` helper. Sprites for motes, bubbles
+and glows, crossed planes for kelp and light shafts, so nothing reads edge-on from an arbitrary
+camera angle.
+
+**Surface breathing.** Breaking the surface refills the tank. Air is free up top; what it costs
+is the storm clock and the swim back down. This moves the pressure from "don't drown" to "time
+spent breathing is time not spent searching", which is the better version of the same tension.
+
+**Depth darkens for real.** Fog range, hemisphere and sun intensity all fall off with depth —
+measured 68m/1.21 at the surface against 22m/0.20 on the bed — rather than a colour filter over
+a bright scene. Floodlight pickups push back against it.
+
+**Sonar plot** is now top-down with fog of war and a depth gutter showing where the diver and
+each contact sit in the water column.
+
+### Part 2 — nine levels, a menu, and enemies that are not all sharks
+
+**Levels are data.** `src/levels.js` holds three biomes × three dives. Applying a level mutates
+the live `CONFIG` and `PALETTE`, so every system picks up the new numbers without knowing a
+level system exists. Sizes run 26m across / 20m deep up to 40m across / 60m deep.
+
+**Three threat models, not three reskins.**
+- *Shark* — a hunter. Fast, wide detection, lethal on contact. Only boost breaks a pursuit.
+- *Squid* — an ambusher. Hangs almost still until you are close, then darts. It does not kill:
+  it rips air out of the tank. The threat is to your budget, which is why it belongs in the
+  deep levels where the swim home is already long.
+- *Jelly* — a drifting hazard field. Never hunts. Stings for air and stalls you, so clusters
+  are an obstacle you route around rather than fight.
+
+**Menu and progression.** Landing → main menu → level select, with per-level best scores and
+each clear unlocking the next. FTUX plays once, ever.
+
+**The bug this nearly shipped with.** The scene was built once at load, so picking a 60m-deep
+dive would still have rendered the 28m one. Environment construction is now split out of
+`createScene()` into `buildEnvironment()`, rebuilt on every level change; the minimap grid
+rebuilds with it.
+
+**Also fixed.** `loadProgress` collided with the loading-bar variable of the same name in
+main.js. Added `tools/serve.py`, a no-cache dev server — plain `http.server` lets the browser
+heuristically cache ES modules, which surfaces as a bogus "does not provide an export named X"
+after an edit and cost real time to diagnose.
+
+**Verification.** All 9 levels generate with correct dimensions, part counts and enemy rosters;
+minimap grid matches each world; **zero buried spawns**. Reachability **27/27** (3 runs × 9
+levels), including `vent-3` where all five parts are sealed in rocks. Squid and jelly confirmed
+non-lethal but costly; jelly confirmed not to pursue (1.1m of drift while the diver sat 5m away);
+shark still lethal. Progression persists and unlocks correctly.
+
+**Open — worth a decision before the deadline.** Judging scores *Focus* at 15%, explicitly for
+"a contained experience avoiding over-scoping". Nine levels all share one core loop deliberately.
+Adding genuinely different objectives per biome is the obvious next step and was discussed, but
+it cuts directly against that criterion. My recommendation is to keep the single loop and let
+the biomes vary the *problem*, not the *goal*.
+
+---
+
+## Session 07 — TBD
 
 <!-- Template:
 **Goal.**
