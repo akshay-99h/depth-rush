@@ -424,7 +424,45 @@ idle. No overlapping HUD boxes.
 
 ---
 
-## Session 09 — TBD
+## Session 09 — 2026-09-01 · Everything unlocked, and a measured learning objective
+
+**Unlocked all nine.** `isUnlocked()` now returns true unconditionally. This build exists to be
+judged, not to retain anyone — gating dives behind clears would mean most people only ever see the
+first one. Clears and best scores are still tracked and still shown on the cards.
+
+**A stated, measured learning objective per dive.** Each level names the skill it drills — air
+discipline, trip planning, load handling, search pattern, reserve management, threat avoidance,
+light discipline, dead reckoning, endurance — and then **measures whether it was demonstrated**
+against real gameplay data rather than awarding a participation badge:
+
+| Metric | Read from |
+|---|---|
+| `minAir` | lowest tank reading over the run |
+| `dives` | number of descents taken |
+| `contacts` | times an animal actually touched you |
+| `sweptPct` | fraction of the site revealed on the sonar plot |
+| `lights` | floodlights recovered |
+| `timeLeft` | storm clock remaining on escape |
+
+Each objective declares a metric, a comparison and a target, so adding one is data, not code.
+The end-of-run debrief shows the skill, the instruction, the reading against the target, and a
+MET / NOT MET verdict. It is worth a 400 bonus and **only pays out on a run you actually finished** —
+a reading that passes on a failed dive earns nothing, because you did not complete the exercise.
+It never gates progress, so it teaches without blocking.
+
+Surfaced in three places: a `TRAINS` line on each level card, an objective toast on arriving at the
+boat, and the debrief panel on the end screen.
+
+**Also.** Rewrote `docs/design-intent.md`, which still described the old single-level 2.5D game.
+
+**Verification.** From a cleared save: 9 cards, **0 locked, 0 disabled**, all showing their skill.
+All nine metrics read a real value including `sweptPct` (68% on a seeded sweep) and `contacts`
+correctly failing at 1 against a target of 0. Objective met → 400 bonus, score 3,530; the same run
+with the tank run down to 8% → no bonus, score 3,130; a loss with a passing reading → no bonus.
+
+---
+
+## Session 10 — TBD
 
 <!-- Template:
 **Goal.**

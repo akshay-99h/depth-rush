@@ -1,41 +1,40 @@
 # Depth Rush — Design Intent
 
-**Target players.** Mobile arcade players who already run Subway Surfers, Temple Run or Alto's
-Odyssey, plus players who enjoy light resource tension. One thumb, portrait, a single run of a
-few minutes, no reading-heavy onboarding, ages 10+. The context is a commute, a queue, or a
-break with the phone in one hand.
+**Target players.** Mobile arcade players who already run Subway Surfers or Alto's Odyssey, plus
+players who enjoy light resource tension. Portrait, one phone, a few minutes per dive, ages 10+.
+The context is a commute or a queue.
 
-**Concept.** Your boat is wrecked, five of its parts are scattered across the seabed, and a
-storm makes landfall in eight minutes. Dive, drill rocks open, haul parts back to the hull and
-fit them before the weather arrives. Every second underwater is a bet against your air, and
-every second spent fitting a part is a second not spent finding the next one.
+**Concept.** A salvage diver works a wreck site with eight minutes before the storm lands. Air is
+the currency: it drains while you work, refills only at the surface, and the swim back always costs
+more than you think. Every dive is a bet on how much you can finish before you have to go up.
 
-**Core loop.** The run alternates between two places and one clock. On the boat you can dive,
-or hold Repair to fit what you are carrying. Underwater you swim on a virtual stick, push into
-rocks to drill them open, collect parts and gear, and dodge patrolling sharks. Swimming back to
-the hull surfaces you and refills your tank. The storm timer runs in both places — that is the
-whole design. Fit all five parts and the boat sails; that is the win. The run ends early if
-your air runs out, a shark catches you, or the storm lands.
+**Core loop.** Three jobs share every underlying system — swimming, air, the storm clock, sonar,
+enemies — and differ in the shape of the trip they ask for. *Salvage*: search the bed, carry parts
+home, fit them. *Survey*: load beacons at the boat, carry them out, plant them on marked anchors.
+*Cargo*: one crate at a time, slowed and burning air faster, so it is many trips and no batching.
+Each of three biomes runs all three jobs, so a biome teaches the full set and the deeper biomes
+re-test them in worse water.
 
-**What's in the prototype.** One Three.js seabed with a portrait camera; joystick movement;
-oxygen with its base, drill and boost drain rates; the eight-minute clock with the water
-darkening over the last ninety seconds; per-run randomised placement of parts, rocks, spare
-tanks, fins, floodlights and sharks; a five-item checklist and a ship progress bar;
-hold-to-repair; two sharks that patrol and chase; a boost burst with a cooldown; a marker
-pointing at the nearest part still out there; the win state with the boat pulling away; and a
-score breakdown with a local best. Sound is synthesised at runtime. Art is deliberately flat
-and placeholder-grade — this exists to prove the loop feels good, not to look finished.
+**Learning objective.** Every dive is framed as a training exercise and names the skill it drills:
+air discipline, trip planning, load handling, search pattern, reserve management, threat avoidance,
+light discipline, dead reckoning, endurance. Each one is *measured* against real gameplay data —
+lowest tank reading, number of dives taken, animal contacts, percentage of the site swept — and the
+end-of-run debrief reports what you achieved against the target and whether you met it. It is a
+secondary goal worth a score bonus, never a gate, so it teaches without blocking.
 
-**Three choices worth naming.** First, drilling has no button: you push the stick into a rock
-and hold, which keeps one control underwater and means the action cannot fire by accident.
-Second, repair is a hold rather than a tap, so the seconds it costs are felt against a visibly
-running clock instead of deducted off-screen. Third, nothing carries between runs. Progression
-happens *within* a dive — a floodlight makes the next dark pocket readable, fins make every
-later swim cheaper in air, a spare tank buys the time to risk one more drill — and then it is
-gone.
+**Controls.** Left stick swims relative to where you are looking; a right-hand eye stick turns your
+head. Swimming follows your pitch, so looking down and pushing forward takes you down — there is no
+separate ascend control. Boost sits between them. For players who find two sticks too much, tilt-to-swim
+drives movement from the phone's own orientation and re-centres on every dive.
 
-**Future vision.** More biomes with hazards of their own; a meta-currency funding permanent
-upgrades to tank size, fin speed, drill speed and sonar range; daily seeded runs, leaderboards
-and ghost replays; a light narrative layer of stranded divers to rescue; storm escalation with
-lightning that scrambles the sonar; colourblind-safe HUD states; rewarded-ad continues and
-cosmetic-only purchases, never pay-to-win.
+**What's in the prototype.** Nine dives across three biomes, all unlocked, spanning 26m to 40m across
+and 20m to 60m deep. Three enemy types with genuinely different threat models: sharks hunt and kill
+and only boost breaks a pursuit; squid ambush and tear air out of the tank rather than killing;
+jellies never hunt at all but sting and stall anything that drifts into them. Depth darkens the water
+for real — fog, ambient and sun all fall off, and your lamp is what pushes back. A top-down sonar plot
+with fog of war and a depth gutter. From the deck you can orbit the view and pan the camera out over
+the site to plan a route before going in.
+
+**Future vision.** Permanent upgrades to tank, fins and lamp; daily seeded dives with leaderboards
+and ghost replays; storm escalation that scrambles the sonar; colourblind-safe HUD states;
+rewarded-ad continues and cosmetic-only purchases, never pay-to-win.

@@ -123,5 +123,6 @@ export const CONFIG = {
     perPartInstalled: 200,
     perCloseCall: 50,
     perSecondOnEscape: 5,
+    trainingBonus: 400,       // paid only when the dive's stated skill is demonstrated
   },
 };

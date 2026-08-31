@@ -132,6 +132,9 @@ function showLevels() {
             <span class="job" data-job="${l.objective}">${JOB[l.objective]}</span>
           </span>
           <span class="brief">${l.brief}</span>
+          ${l.training ? `<span class="trains">
+            <span class="lab">Trains</span><span class="skill">${l.training.skill}</span>
+          </span>` : ''}
           <span class="stats">
             <span><b>${l.world.halfWidth * 2}m</b> across</span>
             <span><b>${Math.abs(l.world.seabedY)}m</b> deep</span>
@@ -198,6 +201,13 @@ function beginRun() {
   game.startRun();
   showScreen('boat');
   hud.toastMessage(`${getBiome(currentLevel.biome).name} — ${currentLevel.name}`);
+  if (currentLevel.training) {
+    setTimeout(() => {
+      if (screen === 'boat' || screen === 'dive') {
+        hud.toastMessage(`Objective: ${currentLevel.training.skill}`);
+      }
+    }, 1900);
+  }
 }
 
 bindHold($('btn-boost'), (on) => { game.boostHeld = on; });
@@ -296,11 +306,40 @@ function showEnd(outcome, reason, s) {
   if (s.carrying.length && game.objective !== 'beacon') {
     rows.push(['Lost with the diver', `${s.carrying.length}`, 0]);
   }
+  if (s.breakdown.training) {
+    rows.push(['Training objective', s.training.skill, s.breakdown.training]);
+  }
   $('end-breakdown').innerHTML = rows.map(([label, detail, value]) =>
     `<li><span>${label} · ${detail}</span><b>${value.toLocaleString()}</b></li>`
   ).join('') + `<li class="total"><span>Score</span><b>${s.score.toLocaleString()}</b></li>`;
 
   progress = saveResult(currentLevel.id, outcome, s.score);
+  // Training debrief: what the dive was meant to teach, and what the run
+  // actually measured.
+  const t = s.training;
+  const box = $('end-training');
+  if (t) {
+    const fmt = {
+      minAir: (v) => [`Lowest tank <b>${v}%</b>`, `target ${t.target}%`],
+      dives: (v) => [`<b>${v}</b> dive${v === 1 ? '' : 's'}`, `target ${t.target} or fewer`],
+      contacts: (v) => [`<b>${v}</b> contact${v === 1 ? '' : 's'}`, `target ${t.target}`],
+      sweptPct: (v) => [`<b>${v}%</b> of the site swept`, `target ${t.target}%`],
+      lights: (v) => [`<b>${v}</b> floodlight${v === 1 ? '' : 's'}`, `target ${t.target}`],
+      timeLeft: (v) => [`<b>${v}s</b> to spare`, `target ${t.target}s`],
+    }[t.metric] ?? ((v) => [`<b>${v}</b>`, `target ${t.target}`]);
+    const [got, aim] = fmt(t.value);
+    box.dataset.met = String(t.met);
+    box.innerHTML = `
+      <div class="lab">Training objective</div>
+      <div class="skill">${t.skill}</div>
+      <div class="brief">${t.brief}</div>
+      <div class="result"><span>${got} &middot; ${aim}</span>
+        <span class="verdict">${t.met ? 'MET' : 'NOT MET'}</span></div>`;
+    box.style.display = '';
+  } else {
+    box.style.display = 'none';
+  }
+
   const best = progress.best[currentLevel.id] ?? s.score;
   $('end-best').textContent = `${currentLevel.name} — best ${best.toLocaleString()}`;
   $('btn-again').textContent = outcome === 'win' ? 'Dive Again' : 'Retry';

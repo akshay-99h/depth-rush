@@ -294,6 +294,12 @@
   .lvl .job[data-job="beacon"]  { background: #6fd8ff; }
   .lvl .job[data-job="haul"]    { background: #d8a05a; }
   .lvl .brief { font-size: 11px; color: var(--muted); margin-top: 5px; line-height: 1.45; }
+  .lvl .trains {
+    display: flex; align-items: baseline; gap: 6px; margin-top: 7px;
+    font-size: 10px; line-height: 1.4;
+  }
+  .lvl .trains .lab { color: var(--muted); letter-spacing: 0.1em; text-transform: uppercase; font-size: 8.5px; }
+  .lvl .trains .skill { color: var(--foam); font-weight: 620; }
   .lvl .stats { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
   .lvl .stats span {
     font-size: 9px; letter-spacing: 0.04em; color: var(--muted);
@@ -370,6 +376,19 @@
   #end-breakdown li b { font-weight: 650; }
   #end-breakdown li.total { border-bottom: none; padding-top: 14px; font-size: 17px; }
   #end-breakdown li.total span, #end-breakdown li.total b { color: var(--ok); }
+  #end-training {
+    margin: 20px auto 0; max-width: 300px; text-align: left;
+    border: 1px solid var(--stroke); border-radius: 14px; padding: 13px 14px;
+    background: rgba(7,36,48,0.5);
+  }
+  #end-training[data-met="true"] { border-color: rgba(53,214,196,0.45); background: rgba(53,214,196,0.07); }
+  #end-training .lab { font-size: 8.5px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); }
+  #end-training .skill { font-size: 14px; font-weight: 650; margin-top: 5px; }
+  #end-training .brief { font-size: 11px; color: var(--muted); margin-top: 4px; line-height: 1.45; }
+  #end-training .result { font-size: 11px; margin-top: 9px; display: flex; justify-content: space-between; gap: 10px; }
+  #end-training .result b { font-weight: 650; }
+  #end-training[data-met="true"] .verdict { color: var(--ok); }
+  #end-training[data-met="false"] .verdict { color: var(--muted); }
   #end-best { margin-top: 12px; font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
   #btn-again { margin: 26px auto 0; padding: 16px 40px; border-radius: 999px; background: var(--ok); color: var(--abyss); font-size: 13px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; }
 </style>
@@ -540,6 +559,7 @@
     <h1 id="end-title">RUN OVER</h1>
     <div id="end-reason"></div>
     <ul id="end-breakdown"></ul>
+    <div id="end-training" data-met="false"></div>
     <div id="end-best"></div>
     <button id="btn-again">Dive Again</button>
     <button class="menu-btn" id="btn-end-levels" style="margin:14px auto 0;width:200px;height:46px;">Select dive</button>

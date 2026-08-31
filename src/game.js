@@ -233,6 +233,9 @@ export class Game {
       flyups: [],
       depthT: 0,
       camDist: CONFIG.camera.distance,
+      // measurements for the dive's training objective
+      minAir: CONFIG.oxygen.max,
+      contacts: 0,
       planted: 0,
       delivered: 0,
       // Scouting from the deck: orbit around a focus you can walk over the map.
@@ -518,6 +521,7 @@ export class Game {
       if (hauling) drain *= CONFIG.objective.haul.drainFactor;
       const before = s.oxygen;
       s.oxygen -= drain * dt;
+      s.minAir = Math.min(s.minAir, s.oxygen);
       const lowAt = CONFIG.oxygen.max * CONFIG.oxygen.redBelow;
       if (before > lowAt && s.oxygen <= lowAt) this.audio.alarm();
     }
@@ -707,9 +711,14 @@ export class Game {
       }
 
       if (p && d < spec.contactRadius) {
-        if (spec.lethal) { this._end('loss', `A ${spec.label.toLowerCase()} caught you.`); return true; }
+        if (spec.lethal) {
+          s.contacts += 1;
+          this._end('loss', `A ${spec.label.toLowerCase()} caught you.`);
+          return true;
+        }
         if (e.biteTimer <= 0) {
           e.biteTimer = spec.biteCooldown;
+          s.contacts += 1;
           s.oxygen = Math.max(0, s.oxygen - spec.oxygenBite);
           if (spec.slowFactor) s.stunTimer = 1.2;
           this.audio.danger();
@@ -785,17 +794,40 @@ export class Game {
 
   /* ------------------------------------------------------------------ end */
 
+  // Each dive states a skill and then measures whether it was demonstrated.
+  // The measurement is real gameplay data, not a participation badge — and the
+  // bonus only pays out on a run you actually finished.
+  _evaluateTraining(outcome) {
+    const t = CONFIG.training;
+    if (!t) return null;
+    const s = this.state;
+    const readings = {
+      minAir: Math.round(Math.max(0, s.minAir)),
+      dives: s.dives,
+      contacts: s.contacts,
+      closeCalls: s.closeCalls,
+      lights: s.lightStacks,
+      sweptPct: Math.round(this.minimap?.exploredPct() ?? 0),
+      timeLeft: Math.round(Math.max(0, s.timeLeft)),
+    };
+    const value = readings[t.metric] ?? 0;
+    const hit = t.compare === 'lte' ? value <= t.target : value >= t.target;
+    return { ...t, value, met: hit && outcome === 'win' };
+  }
+
   _end(outcome, reason) {
     const s = this.state;
     if (s.outcome) return;
     s.outcome = outcome;
     s.reason = reason;
+    s.training = this._evaluateTraining(outcome);
     s.breakdown = {
       parts: this.goalDone * CONFIG.score.perPartInstalled,
       closeCalls: s.closeCalls * CONFIG.score.perCloseCall,
       escape: outcome === 'win' ? Math.round(Math.max(0, s.timeLeft)) * CONFIG.score.perSecondOnEscape : 0,
+      training: s.training?.met ? CONFIG.score.trainingBonus : 0,
     };
-    s.score = s.breakdown.parts + s.breakdown.closeCalls + s.breakdown.escape;
+    s.score = s.breakdown.parts + s.breakdown.closeCalls + s.breakdown.escape + s.breakdown.training;
     if (outcome === 'win') { this.audio.win(); this.outro = 0; } else this.audio.lose();
     this.hooks.onEnd?.(outcome, reason, s);
   }

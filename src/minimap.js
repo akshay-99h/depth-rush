@@ -53,6 +53,14 @@ export class Minimap {
     }
   }
 
+  // Fraction of the site swept, as a percentage. Used by the search-pattern
+  // training objective.
+  exploredPct() {
+    let n = 0;
+    for (let i = 0; i < this.explored.length; i++) n += this.explored[i];
+    return this.explored.length ? (100 * n) / this.explored.length : 0;
+  }
+
   isExplored(x, z) {
     const gx = Math.floor(x + W.halfWidth), gz = Math.floor(z + W.halfDepth);
     if (gx < 0 || gx >= this.cols || gz < 0 || gz >= this.rows) return false;
