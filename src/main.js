@@ -151,6 +151,11 @@ function showEnd(outcome, reason, s) {
     ['Close calls', `${s.closeCalls}`, s.breakdown.closeCalls],
     ['Time to spare', outcome === 'win' ? `${Math.round(s.timeLeft)}s` : '—', s.breakdown.escape],
   ];
+  // Parts still in hand went down with the diver. Say so, rather than leaving the
+  // player to wonder why the three they recovered scored nothing.
+  if (s.carrying.length) {
+    rows.push([`Lost with the diver`, `${s.carrying.length}`, 0]);
+  }
   $('end-breakdown').innerHTML = rows.map(([label, detail, value]) =>
     `<li><span>${label} · ${detail}</span><b>${value.toLocaleString()}</b></li>`
   ).join('') + `<li class="total"><span>Score</span><b>${s.score.toLocaleString()}</b></li>`;
@@ -186,7 +191,7 @@ requestAnimationFrame(frame);
 
 // Playtest hook: drive the sim by hand, jump screens, inspect state.
 globalThis.DepthRush = {
-  game, audio, minimap,
+  game, audio, minimap, hud,
   screen: () => screen,
   go: showScreen,
   begin: beginRun,

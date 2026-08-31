@@ -110,6 +110,37 @@ export class Game {
     }
   }
 
+  // A part sealed in a rock has no mesh until the rock cracks. Without this the
+  // only feedback was a toast, so drilling felt like nothing happened.
+  _spawnFlyup(id, x, y) {
+    const m = MESHES.part(id);
+    m.position.set(x, y, 0.35);
+    this.group.add(m);
+    this.state.flyups.push({ mesh: m, t: 0 });
+    for (let i = 0; i < 6; i++) this._emitBubble(x, y, true);
+  }
+
+  _updateFlyups(dt) {
+    const s = this.state;
+    if (!s.flyups.length) return;
+    const p = this.diver.position;
+    for (let i = s.flyups.length - 1; i >= 0; i--) {
+      const f = s.flyups[i];
+      f.t += dt / 0.75;
+      if (f.t >= 1) {
+        this.group.remove(f.mesh);
+        f.mesh.traverse((n) => { n.geometry?.dispose?.(); n.material?.dispose?.(); });
+        s.flyups.splice(i, 1);
+        continue;
+      }
+      const e = f.t * f.t;                       // ease in, so it lingers then darts home
+      f.mesh.position.x += (p.x - f.mesh.position.x) * e * 0.35;
+      f.mesh.position.y += (p.y + 0.4 - f.mesh.position.y) * e * 0.35;
+      f.mesh.rotation.z += dt * 5;
+      f.mesh.scale.setScalar(1 + Math.sin(f.t * Math.PI) * 0.5 - f.t * 0.55);
+    }
+  }
+
   /* ------------------------------------------------------------- lifecycle */
 
   startRun(seed = randomSeed()) {
@@ -151,6 +182,7 @@ export class Game {
       score: 0,
       bubbleTimer: 0,
       kick: 0,
+      flyups: [],
     };
     this.minimap?.reset();
 
@@ -362,35 +394,64 @@ export class Game {
     }
 
     // --- sharks ---
+    // Steering, not teleporting. The old version snapped position straight at the
+    // diver every frame using Math.sign(), so the instant it drew level the sign
+    // flipped and it juddered and flip-flopped its facing. Now it accelerates onto
+    // a heading, and pursuit is a latched state with its own detection ring rather
+    // than something that switched on and off at the edge of the danger radius.
+    const SH = CONFIG.shark;
     let threat = false;
     for (const shark of s.level.sharks) {
-      const d = Math.hypot(shark.x - p.x, shark.y - p.y);
-      if (d < CONFIG.shark.dangerRadius) {
-        threat = true;
-        shark.chaseTimer = CONFIG.shark.loseInterestAfter;
-        shark.dwell += dt;
-        const dirX = Math.sign(p.x - shark.x) || 1;
-        shark.x += dirX * CONFIG.shark.chaseSpeed * dt;
-        shark.y += Math.sign(p.y - shark.y) * CONFIG.shark.chaseSpeed * 0.45 * dt;
-        shark.dir = dirX;
-        if (d < CONFIG.shark.catchRadius) return this._end('loss', 'A shark caught you.');
+      const dx = p.x - shark.x, dy = p.y - shark.y;
+      const d = Math.hypot(dx, dy) || 0.0001;
+
+      if (d < SH.detectRadius) shark.chaseTimer = SH.loseInterestAfter;
+      else shark.chaseTimer -= dt;
+      const chasing = shark.chaseTimer > 0;
+
+      let wantX, wantY;
+      if (chasing) {
+        wantX = (dx / d) * SH.chaseSpeed;
+        wantY = (dy / d) * SH.chaseSpeed * 0.8;
       } else {
-        // Escaping a radius you actually loitered inside is the risk bonus.
-        if (shark.dwell >= CONFIG.shark.closeCallDwell && !shark.banked) {
+        wantX = shark.dir * SH.patrolSpeed;
+        wantY = THREE.MathUtils.clamp((shark.laneY - shark.y) * 0.8, -1.2, 1.2);
+      }
+      const turn = Math.min(1, SH.turnRate * dt);
+      shark.vx += (wantX - shark.vx) * turn;
+      shark.vy += (wantY - shark.vy) * turn;
+
+      shark.x += shark.vx * dt;
+      shark.y += shark.vy * dt;
+      if (shark.x <= -W.halfWidth) { shark.x = -W.halfWidth; shark.dir = 1; shark.vx = Math.abs(shark.vx); }
+      if (shark.x >= W.halfWidth) { shark.x = W.halfWidth; shark.dir = -1; shark.vx = -Math.abs(shark.vx); }
+      shark.y = clamp(shark.y, W.seabedY + 0.9, W.surfaceY - 1.6);
+
+      if (d < SH.dangerRadius) {
+        threat = true;
+        shark.dwell += dt;
+        if (d < SH.catchRadius) return this._end('loss', 'A shark caught you.');
+      } else {
+        // Escaping a ring you actually loitered inside is the risk bonus.
+        if (shark.dwell >= SH.closeCallDwell && !shark.banked) {
           shark.banked = true;
           s.closeCalls += 1;
           this.audio.danger();
           this.hooks.onToast?.('Close call +' + CONFIG.score.perCloseCall);
         }
         if (shark.dwell > 0) { shark.dwell = 0; shark.banked = false; }
-        shark.chaseTimer -= dt;
-        shark.x += shark.dir * CONFIG.shark.patrolSpeed * dt;
-        if (Math.abs(shark.x) > W.halfWidth) shark.dir *= -1;
       }
+
+      // Facing is latched through a deadzone so it cannot strobe when the shark
+      // is moving almost straight up or down.
+      if (shark.vx > SH.facingDeadzone) shark.face = 1;
+      else if (shark.vx < -SH.facingDeadzone) shark.face = -1;
+
       shark.mesh.position.set(shark.x, shark.y, 0);
-      shark.mesh.scale.x = shark.dir > 0 ? 1 : -1;
-      shark.mesh.rotation.z = Math.sin(this.clock * 3 + shark.x) * 0.06;
-      shark.mesh.rotation.y = Math.sin(this.clock * (threat ? 7 : 3.4) + shark.x) * 0.18;
+      shark.mesh.scale.x = shark.face;
+      const pitch = Math.atan2(shark.vy, Math.max(0.4, Math.abs(shark.vx)));
+      shark.mesh.rotation.z = clamp(pitch, -0.7, 0.7) * shark.face;
+      shark.mesh.rotation.y = Math.sin(this.clock * (chasing ? 7 : 3.4) + shark.x) * 0.16;
     }
     s.sharkThreat = threat;
 
@@ -406,7 +467,10 @@ export class Game {
       return;
     }
 
-    // --- sonar bearing to the nearest part still out there ---
+    // --- sonar ---
+    // Normally a bearing on the nearest part still out there. Once the tank drops
+    // past the reserve it switches to the boat instead — the moment you need a way
+    // home is exactly the moment a part bearing stops being the useful answer.
     const remaining = [
       ...s.level.parts.filter((x) => !x.taken),
       ...s.level.rocks.filter((r) => !r.opened && r.part),
@@ -416,7 +480,13 @@ export class Game {
       const d = Math.hypot(o.x - p.x, o.y - p.y);
       if (d < nearD) { nearD = d; near = o; }
     }
-    s.sonar = near ? { dist: nearD, bearingDeg: (Math.atan2(near.x - p.x, near.y - p.y) * 180) / Math.PI } : null;
+    const lowAir = s.oxygen / CONFIG.oxygen.max < CONFIG.oxygen.headHomeBelow;
+    if (lowAir || !near) {
+      const bx = this.boat.position.x - p.x, by = this.boat.position.y - p.y;
+      s.sonar = { dist: Math.hypot(bx, by), bearingDeg: (Math.atan2(bx, by) * 180) / Math.PI, mode: 'home' };
+    } else {
+      s.sonar = { dist: nearD, bearingDeg: (Math.atan2(near.x - p.x, near.y - p.y) * 180) / Math.PI, mode: 'part' };
+    }
 
     if (s.oxygen <= 0) return this._end('loss', 'Your tank ran dry.');
   }
@@ -429,6 +499,7 @@ export class Game {
     s.drillRock = null;
     s.drillProgress = 0;
     if (rock.part) {
+      this._spawnFlyup(rock.part, rock.x, rock.y);
       this._takePart(rock.part);
     } else {
       s.oxygen = Math.min(CONFIG.oxygen.max, s.oxygen + CONFIG.oxygen.tankRefill);
@@ -522,6 +593,7 @@ export class Game {
       // bearingDeg is measured clockwise from "up", which is how the cone points.
       this.sonarTick.rotation.z = -(s.sonar.bearingDeg * Math.PI) / 180;
       this.sonarTick.material.opacity = 0.25 + 0.7 * (1 - clamp(s.sonar.dist / (W.halfWidth * 1.4), 0, 1));
+      this.sonarTick.material.color.setHex(s.sonar.mode === 'home' ? PALETTE.ok : PALETTE.signal);
     } else {
       this.sonarTick.visible = false;
     }
@@ -560,6 +632,7 @@ export class Game {
       pos.needsUpdate = true;
     }
     this._updateBubbles(dt);
+    this._updateFlyups(dt);
 
     // Boat: bob with the swell, and list to starboard by however much of her is
     // still missing. Fitting a part visibly rights her — the progress bar and

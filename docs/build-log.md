@@ -212,7 +212,62 @@ is 163 meshes; sim cost 0.021 ms/frame. `tools/package.sh` passes.
 
 ---
 
-## Session 05 — TBD
+## Session 05 — 2026-08-27 · Playtest fixes and a balance pass
+
+**Reported.** Parts counter never moved; area too small; sharks glitched; too shallow, so the
+diver was always near a shark; drilling gave no sign a part was recovered. Plus three questions:
+should sharks follow, should there be a dive-up button, and oxygen drains too slowly.
+
+**The finding that drove most of this.** The diver swam at **5 m/s**. Instrumenting a real
+round trip showed it cost about 5 seconds and 10% of a tank — the whole map crossed in six
+seconds. So "area too small" and "oxygen too slow" were the same bug: **distance was free**,
+which made the world feel tiny and the tank irrelevant. Speed is now 2.8 m/s (a hard fin kick).
+The same measured trip now costs ~14s and ~20% of a tank.
+
+**Fixes.**
+- *Counter.* The chip showed fitted parts only, so recovering one looked like nothing happened.
+  It now reads `0+1/5` — fitted, plus an amber carried count. The end screen gained a
+  "Lost with the diver" row so parts that went down with you are accounted for, not silently
+  scored zero.
+- *Shark glitch.* The old code snapped position straight at the diver each frame using
+  `Math.sign()`, so the moment it drew level the sign flipped and it juddered and strobed its
+  facing. Sharks now accelerate onto a heading with a turn rate, clamp to the water column, and
+  latch their facing through a deadzone. Measured: **0 facing flips** over a 4s pursuit,
+  max 0.07 units of travel per frame.
+- *Depth.* Seabed −18m → −26m, width 22m → 28m, loot spread through 13m of column rather than
+  5m, and sharks seeded one per depth band instead of stacked near the bed.
+- *Drill feedback.* A part sealed in a rock had no mesh until the rock cracked, so the only
+  feedback was a toast. The part now spawns at the rock, bursts bubbles, and flies to the diver.
+
+**Answers to the three questions.**
+- *Should sharks follow?* Yes, and that was the real cause of the "glitch". They previously only
+  chased **inside** the danger ring, so they lunged and instantly gave up at its edge — that
+  flicker read as a bug. Pursuit is now a latched state with its own 6m detection ring and a
+  2.5s memory.
+- *Dive-up button?* Recommended against, and not built. The swim home **is** the tension — a
+  button that skips it deletes the core bet. What was missing was navigation, so the sonar
+  chevron now switches from "nearest part" (amber) to "bearing on the boat" (teal) once the
+  tank drops below 35%. It answers the need at exactly the moment it matters.
+- *Oxygen too slow?* Fixed by the speed change plus a tighter drain: 85s → 45s per tank.
+
+**Balance bug this exposed.** With sharks properly pursuing, **boost could not break one.**
+At 1.8s hold / 2.4s cooldown the duty cycle averaged 4.1 m/s against a 3.2 m/s chase, so you
+could never open enough water before hitting a wall — boost just delayed the death. Now 2.4s /
+2.0s. Measured over 12 trials each: swim-only **caught 12/12**, with boost **shakes the pursuit
+12/12**. That is the intended shape — boost is the answer to a shark, and it costs air.
+
+**Verification.** Reachability 20/20 across fresh seeds. Zero buried spawns across 40 seeds.
+All four end paths resolve with correct reasons. An honest autopilot — no teleporting, no
+oxygen refills, ignoring spare tanks and boost — wins 4 of 8, losing 3 to a dry tank. That is
+the right shape for a bot that never manages its air.
+
+**Open question.** Bot wins take only 76–105s of the 480s storm budget, so the clock may be
+generous; real play involves searching, which the bot skips, so the honest number is higher.
+Worth watching in a human playtest before touching the 8 minutes the FTUX copy promises.
+
+---
+
+## Session 06 — TBD
 
 <!-- Template:
 **Goal.**

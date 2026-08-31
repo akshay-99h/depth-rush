@@ -12,7 +12,8 @@ export class Hud {
     this.shipFill = $('ship-fill');
     this.checklist = $('checklist');
     this.checklistItems = $('checklist-items');
-    this.checklistCount = $('checklist-count');
+    this.clInstalled = $('cl-installed');
+    this.clCarry = $('cl-carry');
     this.boost = $('btn-boost');
     this.vignette = $('danger-vignette');
     this.hint = $('dive-hint');
@@ -49,7 +50,10 @@ export class Hud {
     this.shipFill.style.width = `${(s.installed.length / PART_COUNT) * 100}%`;
 
     const items = game.checklist;
-    this.checklistCount.textContent = `${s.installed.length}/${PART_COUNT}`;
+    // Fitted is the number that matters, but carrying has to register too —
+    // otherwise recovering a part looks like nothing happened.
+    this.clInstalled.textContent = `${s.installed.length}`;
+    this.clCarry.textContent = s.carrying.length ? `+${s.carrying.length}` : '';
     const sig = items.map((i) => i.state).join('|');
     if (sig !== this._checklistSig) {
       this._checklistSig = sig;

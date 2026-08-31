@@ -531,7 +531,7 @@ export function generateLevel(rng) {
   const spread = W.halfWidth - 1.6;
   const spot = () => ({
     x: rng.range(-spread, spread),
-    y: rng.range(W.seabedY + 0.8, W.seabedY + 5.5),
+    y: rng.range(W.seabedY + 0.8, W.seabedY + 13),
   });
   // Keep the water directly under the boat clear so the first dive is never a wall.
   const clearSpot = () => {
@@ -570,12 +570,20 @@ export function generateLevel(rng) {
   add('fins', CONFIG.spawn.fins);
   add('light', CONFIG.spawn.floodlights);
 
+  // One shark per depth band, so they are spread through the column rather than
+  // all stacked near the bed.
   const sharks = [];
+  const band = (W.surfaceY - 4 - (W.seabedY + 3)) / CONFIG.shark.count;
   for (let i = 0; i < CONFIG.shark.count; i++) {
+    const laneY = rng.range(W.seabedY + 3 + band * i, W.seabedY + 3 + band * (i + 1));
     sharks.push({
       x: rng.range(-spread, spread),
-      y: rng.range(W.seabedY + 2.5, W.seabedY + 9),
+      y: laneY,
+      laneY,
+      vx: rng.pick([-1, 1]) * CONFIG.shark.patrolSpeed,
+      vy: 0,
       dir: rng.pick([-1, 1]),
+      face: 1,
       chaseTimer: 0,
       dwell: 0,
       banked: false,
