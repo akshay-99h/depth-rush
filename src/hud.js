@@ -21,8 +21,11 @@ export class Hud {
     this.toast = $('toast');
     this.repairFill = document.querySelector('#btn-repair .fill');
     this.btnRepair = $('btn-repair');
+    this.repairLabel = document.querySelector('#btn-repair span');
     this.boatStatus = $('boat-status');
     this.depth = $('depth-value');
+    this.progressCap = document.querySelector('#ship-progress .cap');
+    this.partsCap = document.querySelector('#btn-checklist .chip-label');
 
     this._toastTimer = null;
     this._checklistSig = '';
@@ -43,6 +46,8 @@ export class Hud {
   update(game) {
     const s = game.state;
     if (!s) return;
+    const obj = game.objective;
+    const NOUN = { salvage: 'Parts', beacon: 'Beacons', haul: 'Cargo' }[obj];
 
     const t = Math.max(0, s.timeLeft);
     this.timer.textContent = `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
@@ -50,12 +55,16 @@ export class Hud {
       : t <= CONFIG.run.lateGameSeconds ? 'true' : 'false';
 
     const total = game.partsTotal;
-    this.shipFill.style.width = `${(s.installed.length / Math.max(1, total)) * 100}%`;
+    const done = game.goalDone;
+    this.shipFill.style.width = `${(done / Math.max(1, total)) * 100}%`;
+    this.progressCap.textContent =
+      obj === 'beacon' ? 'Survey progress' : obj === 'haul' ? 'Cargo delivered' : 'Progress of ship';
+    this.partsCap.textContent = NOUN;
 
     const items = game.checklist;
     // Fitted is the number that matters, but carrying has to register too —
     // otherwise recovering a part looks like nothing happened.
-    this.clInstalled.textContent = `${s.installed.length}`;
+    this.clInstalled.textContent = `${done}`;
     this.clTotal.textContent = `/${total}`;
     this.clCarry.textContent = s.carrying.length ? `+${s.carrying.length}` : '';
     const sig = items.map((i) => i.state).join('|');
@@ -78,7 +87,9 @@ export class Hud {
       this.vignette.dataset.on = s.sharkThreat ? 'true' : 'false';
 
       let hint = '';
-      if (s.drillRock) hint = `Drilling ${Math.round(s.drillProgress * 100)}%`;
+      if (s.drillRock) {
+        hint = `${s.holdKind === 'anchor' ? 'Planting' : 'Drilling'} ${Math.round(s.drillProgress * 100)}%`;
+      }
       else if (s.breathing) hint = 'Breathing — tank refilling';
       else if (s.sonar && s.sonar.mode === 'part' && s.sonar.dist < 5) hint = 'A part is close';
       this.hint.textContent = hint;
@@ -86,14 +97,31 @@ export class Hud {
     } else {
       this.vignette.dataset.on = 'false';
       this.hint.dataset.on = 'false';
+      const action = game.boatAction;
       this.repairFill.style.setProperty('--fill', `${s.repairProgress * 100}%`);
-      this.btnRepair.disabled = !game.canRepair();
+      this.btnRepair.disabled = !action.enabled;
+      this.repairLabel.textContent = action.label;
 
       const carried = s.carrying.length;
-      this.boatStatus.innerHTML = carried
-        ? `Carrying <b>${carried}</b> part${carried === 1 ? '' : 's'} — hold Repair to fit ${carried === 1 ? 'it' : 'them'}`
-        : s.installed.length >= total ? 'The boat is whole.'
-        : 'Nothing aboard. Dive for the next part.';
+      if (obj === 'beacon') {
+        const left = total - s.planted;
+        this.boatStatus.innerHTML = done >= total
+          ? 'Survey complete.'
+          : carried
+            ? `Carrying <b>${carried}</b> beacon${carried === 1 ? '' : 's'} — ${left} anchor${left === 1 ? '' : 's'} left`
+            : `Hold Load to take beacons aboard — ${left} anchor${left === 1 ? '' : 's'} left`;
+      } else if (obj === 'haul') {
+        this.boatStatus.innerHTML = done >= total
+          ? 'All cargo delivered.'
+          : carried
+            ? 'Crate on deck — hold Unload to secure it'
+            : `Dive for the next crate — <b>${total - done}</b> left`;
+      } else {
+        this.boatStatus.innerHTML = carried
+          ? `Carrying <b>${carried}</b> part${carried === 1 ? '' : 's'} — hold Repair to fit ${carried === 1 ? 'it' : 'them'}`
+          : done >= total ? 'The boat is whole.'
+          : 'Nothing aboard. Dive for the next part.';
+      }
     }
   }
 }

@@ -101,13 +101,14 @@ function showLevels() {
       const span = l.world.halfWidth * 2;
       const plural = { shark: 'sharks', squid: 'squid', jelly: 'jellies' };
       const foes = l.enemies.map((e) => `${e.count} ${e.count > 1 ? plural[e.type] : e.type}`).join(' · ');
+      const job = { salvage: 'Salvage', beacon: 'Survey', haul: 'Cargo' }[l.objective];
       return `<button class="lvl" data-id="${l.id}" data-locked="${!unlocked}"
                 data-cleared="${!!progress.cleared[l.id]}" ${unlocked ? '' : 'disabled'}>
         <span class="idx">${unlocked ? (progress.cleared[l.id] ? '&#10003;' : LEVELS.indexOf(l) + 1) : '&#128274;'}</span>
         <span>
           <span class="name">${l.name}</span>
           <div class="brief">${l.brief}</div>
-          <div class="meta">${span}m across &middot; ${depth}m deep &middot; ${l.parts} parts &middot; ${foes}</div>
+          <div class="meta"><b class="job">${job}</b> &middot; ${span}m across &middot; ${depth}m deep &middot; ${l.goal} targets &middot; ${foes}</div>
         </span>
         <span class="score">${best ? best.toLocaleString() : ''}</span>
       </button>`;
@@ -231,14 +232,15 @@ function showEnd(outcome, reason, s) {
   $('end-reason').textContent = reason;
 
   const rows = [
-    ['Parts fitted', `${s.installed.length}/${game.partsTotal}`, s.breakdown.parts],
+    [{ salvage: 'Parts fitted', beacon: 'Beacons planted', haul: 'Crates delivered' }[game.objective],
+      `${game.goalDone}/${game.partsTotal}`, s.breakdown.parts],
     ['Close calls', `${s.closeCalls}`, s.breakdown.closeCalls],
     ['Time to spare', outcome === 'win' ? `${Math.round(s.timeLeft)}s` : '—', s.breakdown.escape],
   ];
   // Parts still in hand went down with the diver. Say so, rather than leaving the
   // player to wonder why the three they recovered scored nothing.
-  if (s.carrying.length) {
-    rows.push([`Lost with the diver`, `${s.carrying.length}`, 0]);
+  if (s.carrying.length && game.objective !== 'beacon') {
+    rows.push(['Lost with the diver', `${s.carrying.length}`, 0]);
   }
   $('end-breakdown').innerHTML = rows.map(([label, detail, value]) =>
     `<li><span>${label} · ${detail}</span><b>${value.toLocaleString()}</b></li>`

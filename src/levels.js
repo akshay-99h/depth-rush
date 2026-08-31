@@ -39,26 +39,26 @@ export const BIOMES = [
 export const LEVELS = [
   // ---- Continental Shelf -------------------------------------------------
   {
-    id: 'shelf-1', biome: 'shelf', name: 'Shakedown',
-    brief: 'Calm water, one shark, four parts. Learn the stick and the tank.',
+    id: 'shelf-1', biome: 'shelf', name: 'Shakedown', objective: 'salvage',
+    brief: 'Four boat parts on the sand. Learn the stick, the eye and the tank.',
     world: { halfWidth: 13, halfDepth: 13, seabedY: -20 },
-    storm: 480, parts: 4, partsInRocks: 2,
+    storm: 480, goal: 4, partsInRocks: 2,
     spawn: { rocks: 10, tanks: 5, fins: 3, floodlights: 2 },
     enemies: [{ type: 'shark', count: 1 }],
   },
   {
-    id: 'shelf-2', biome: 'shelf', name: 'Reef Break',
-    brief: 'More ground to sweep, and the sharks now work in a pair.',
+    id: 'shelf-2', biome: 'shelf', name: 'Reef Break', objective: 'beacon',
+    brief: 'Survey job: load beacons at the boat and plant them on the marked anchors.',
     world: { halfWidth: 16, halfDepth: 16, seabedY: -24 },
-    storm: 480, parts: 5, partsInRocks: 3,
+    storm: 480, goal: 5, partsInRocks: 3,
     spawn: { rocks: 14, tanks: 5, fins: 3, floodlights: 3 },
     enemies: [{ type: 'shark', count: 2 }],
   },
   {
-    id: 'shelf-3', biome: 'shelf', name: 'Storm Front',
-    brief: 'Seven minutes, four hunters, and the light already going.',
+    id: 'shelf-3', biome: 'shelf', name: 'Storm Front', objective: 'haul',
+    brief: 'Cargo run. One crate at a time, and a crate makes you slow and thirsty.',
     world: { halfWidth: 17, halfDepth: 17, seabedY: -27 },
-    storm: 420, parts: 5, partsInRocks: 3,
+    storm: 420, goal: 5, partsInRocks: 3,
     spawn: { rocks: 15, tanks: 5, fins: 3, floodlights: 3 },
     enemies: [{ type: 'shark', count: 3 }, { type: 'squid', count: 1 }],
     depthFade: { ambientSurface: 0.95, sunSurface: 1.5 },
@@ -66,52 +66,52 @@ export const LEVELS = [
 
   // ---- Kelp Trench -------------------------------------------------------
   {
-    id: 'trench-1', biome: 'trench', name: 'Fogbank',
-    brief: 'Visibility drops fast. Squid do not kill you — they empty you.',
+    id: 'trench-1', biome: 'trench', name: 'Fogbank', objective: 'salvage',
+    brief: 'Salvage in the murk. Squid do not kill you — they empty your tank.',
     world: { halfWidth: 15, halfDepth: 15, seabedY: -32 },
-    storm: 480, parts: 5, partsInRocks: 3,
+    storm: 480, goal: 5, partsInRocks: 3,
     spawn: { rocks: 15, tanks: 6, fins: 3, floodlights: 4 },
     enemies: [{ type: 'squid', count: 2 }, { type: 'shark', count: 1 }],
   },
   {
-    id: 'trench-2', biome: 'trench', name: 'The Narrows',
-    brief: 'A tight cut, deep. Nowhere to boost to.',
+    id: 'trench-2', biome: 'trench', name: 'The Narrows', objective: 'beacon',
+    brief: 'Beacons in a tight, deep cut. Nowhere to boost to.',
     world: { halfWidth: 12, halfDepth: 12, seabedY: -38 },
-    storm: 450, parts: 5, partsInRocks: 4,
+    storm: 450, goal: 5, partsInRocks: 4,
     spawn: { rocks: 16, tanks: 6, fins: 3, floodlights: 4 },
     enemies: [{ type: 'squid', count: 3 }, { type: 'shark', count: 1 }],
   },
   {
-    id: 'trench-3', biome: 'trench', name: 'Blackwater',
-    brief: 'Wide, deep and unlit. Bring the floodlights home.',
+    id: 'trench-3', biome: 'trench', name: 'Blackwater', objective: 'haul',
+    brief: 'Crates, deep and unlit. Every trip is a long one.',
     world: { halfWidth: 17, halfDepth: 17, seabedY: -42 },
-    storm: 450, parts: 5, partsInRocks: 4,
+    storm: 450, goal: 5, partsInRocks: 4,
     spawn: { rocks: 18, tanks: 7, fins: 3, floodlights: 5 },
     enemies: [{ type: 'squid', count: 3 }, { type: 'shark', count: 2 }, { type: 'jelly', count: 3 }],
   },
 
   // ---- Abyssal Vent ------------------------------------------------------
   {
-    id: 'vent-1', biome: 'vent', name: 'First Descent',
-    brief: 'Jellies drift the whole column. They will not chase. They do not need to.',
+    id: 'vent-1', biome: 'vent', name: 'First Descent', objective: 'salvage',
+    brief: 'Salvage past the light. Jellies drift the column and will not chase.',
     world: { halfWidth: 15, halfDepth: 15, seabedY: -48 },
-    storm: 480, parts: 5, partsInRocks: 3,
+    storm: 480, goal: 5, partsInRocks: 3,
     spawn: { rocks: 16, tanks: 7, fins: 4, floodlights: 5 },
     enemies: [{ type: 'jelly', count: 6 }, { type: 'squid', count: 2 }],
   },
   {
-    id: 'vent-2', biome: 'vent', name: 'Cold Seep',
-    brief: 'Everything that lives down here is down here with you.',
+    id: 'vent-2', biome: 'vent', name: 'Cold Seep', objective: 'beacon',
+    brief: 'Beacons at sixty fathoms, with everything that lives down here.',
     world: { halfWidth: 18, halfDepth: 18, seabedY: -54 },
-    storm: 480, parts: 5, partsInRocks: 4,
+    storm: 480, goal: 5, partsInRocks: 4,
     spawn: { rocks: 18, tanks: 7, fins: 4, floodlights: 5 },
     enemies: [{ type: 'jelly', count: 7 }, { type: 'squid', count: 3 }, { type: 'shark', count: 2 }],
   },
   {
-    id: 'vent-3', biome: 'vent', name: 'The Rift',
-    brief: 'Sixty metres of black water and eight minutes of weather.',
+    id: 'vent-3', biome: 'vent', name: 'The Rift', objective: 'haul',
+    brief: 'The long haul. Sixty metres of black water, one crate at a time.',
     world: { halfWidth: 20, halfDepth: 20, seabedY: -60 },
-    storm: 480, parts: 5, partsInRocks: 5,
+    storm: 480, goal: 5, partsInRocks: 5,
     spawn: { rocks: 20, tanks: 8, fins: 4, floodlights: 6 },
     enemies: [{ type: 'jelly', count: 8 }, { type: 'squid', count: 4 }, { type: 'shark', count: 3 }],
   },
@@ -128,9 +128,10 @@ export function applyLevel(level) {
   Object.assign(CONFIG.world, level.world);
   CONFIG.run.stormSeconds = level.storm;
   Object.assign(CONFIG.spawn, level.spawn, {
-    partsInRocks: Math.min(level.partsInRocks, level.parts),
+    partsInRocks: Math.min(level.partsInRocks, level.goal),
   });
-  CONFIG.parts = { count: level.parts };
+  CONFIG.parts = { count: level.goal };
+  CONFIG.objectiveKind = level.objective;
   CONFIG.enemies = level.enemies;
 
   Object.assign(CONFIG.depthFade, biome.depthFade, level.depthFade ?? {});

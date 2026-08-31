@@ -103,6 +103,22 @@ export class Minimap {
       if (part.taken || !this.isExplored(part.x, part.z)) continue;
       dot(part.x, part.z, r * 1.4, '#ffb340');
     }
+    // Anchors were surveyed for you, so they always plot — a beacon dive is a
+    // routing problem, not a search. Crates are a search, so they stay fogged.
+    for (const a of s.level.anchors) {
+      const px = toX(a.x), pz = toZ(a.z);
+      ctx.strokeStyle = a.planted ? '#35d6c4' : '#6fd8ff';
+      ctx.lineWidth = Math.max(1, r * 0.45);
+      ctx.beginPath();
+      ctx.arc(px, pz, r * 1.7, 0, Math.PI * 2);
+      ctx.stroke();
+      if (a.planted) dot(a.x, a.z, r * 0.8, '#35d6c4');
+    }
+    for (const c of s.level.crates) {
+      if (c.taken || !this.isExplored(c.x, c.z)) continue;
+      ctx.fillStyle = '#ffb340';
+      ctx.fillRect(toX(c.x) - r * 1.2, toZ(c.z) - r * 1.2, r * 2.4, r * 2.4);
+    }
 
     // live threat contacts — plotted whether or not you have swept there
     for (const e of s.level.enemies) {

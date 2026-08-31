@@ -21,6 +21,8 @@ export const CONFIG = {
 
   camera: {
     distance: 6.2,            // third-person trail distance
+    minDistance: 0.7,         // backed against a wall it goes near-first-person, which
+                              // is correct: a floor here would leave it inside the rock
     height: 1.5,              // lifted above the diver's head
     lookAhead: 3.0,
     followLerp: 7.0,
@@ -70,6 +72,16 @@ export const CONFIG = {
 
   repair: {
     secondsPerPart: 2.6,
+  },
+
+  // Three objectives share every underlying system — swimming, air, the storm
+  // clock, enemies — and differ in the shape of the trip they ask for.
+  //   salvage: search out, carry many home, fit them.       (out-and-back, loaded return)
+  //   beacon:  load at the boat, carry OUT, plant on site.  (loaded departure, light return)
+  //   haul:    one crate at a time, slow and thirsty.       (many trips, no batching)
+  objective: {
+    beacon: { plantSeconds: 2.0, loadSeconds: 1.1, maxLoad: 3 },
+    haul: { speedFactor: 0.58, drainFactor: 1.7, unloadSeconds: 1.8 },
   },
 
   fins: { speedBonus: 0.16, maxStacks: 3 },

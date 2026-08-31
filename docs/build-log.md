@@ -334,7 +334,58 @@ the biomes vary the *problem*, not the *goal*.
 
 ---
 
-## Session 07 — TBD
+## Session 07 — 2026-09-01 · Three objectives, and camera collision
+
+**Three objectives, not nine.** Rather than a bespoke goal per level, there are three jobs
+rotated through each biome, so a biome teaches all three and the later biomes re-test them in
+worse water. Every job shares swimming, air, the storm clock, enemies, sonar and the minimap;
+what changes is the *shape of the trip*.
+
+| Job | Shape | Where the risk sits |
+|---|---|---|
+| **Salvage** | Search out, carry many home, fit them | Loaded return |
+| **Survey** | Load beacons at the boat, carry OUT, plant on site | Loaded departure |
+| **Cargo** | One crate at a time, slowed and thirsty | Many trips, no batching |
+
+Each biome runs salvage → survey → cargo.
+
+**How they differ mechanically, not just cosmetically.**
+- *Survey* loads a maximum of three beacons per trip, so five anchors is two departures. The
+  survey only counts once it is **called in from the deck**, so the swim home still matters.
+  Anchors always plot on the minimap — you were given the coordinates — which makes a survey a
+  routing problem rather than a search.
+- *Cargo* allows exactly one crate, at 0.58× speed and 1.7× air. Measured loaded speed 1.59 m/s
+  against a 2.8 m/s base. Crates stay behind the fog of war, so it is a search *and* a slog.
+- The hold-to-act gesture is shared: push into a boulder to drill it, push into an anchor to
+  plant. One progress readout, two meanings.
+
+**Camera collision.** The trailing camera clipped through boulders. Now an analytic ray/sphere
+test along the true diver→camera segment (height lift included — testing the flat -forward ray
+left the camera off the line it had checked), pulling in when blocked and easing back out when
+clear, with a post-lerp eviction because the lerp lags the target through fast turns.
+
+The deeper fix was that **scenery boulders were swim-through**. Making them solid — for the
+diver as well as the camera — is why the camera problem largely disappears, and it stops the
+diver gliding through rock. Generation now keeps spawns clear of scenery too.
+
+**The bug that hid itself.** Renaming each level's `parts:` field to `goal:` silently missed
+all nine lines because they are prefixed with `storm:`. `applyLevel` then read `undefined`,
+`generateLevel` fell back to "all five parts", and every level quietly ran five targets —
+including `shelf-1`, which is meant to be a gentler four. It only surfaced because the level
+select rendered "undefined targets". Worth remembering: the fallback made a broken rename look
+like working code.
+
+**Verification.** All 9 levels: declared goal matches generated targets matches `partsTotal`.
+All 9 completed end-to-end through their own objective — **9/9 wins**, salvage, survey and
+cargo each exercised in all three biomes. Camera penetration across **780 samples** on three
+levels: zero (worst case 0.25m clear, exactly the eviction margin).
+
+**Still open.** Kelp is not a camera collider — thin planes would make the camera jumpy — so a
+dense kelp stand can still crowd the frame. Judged not worth the instability.
+
+---
+
+## Session 08 — TBD
 
 <!-- Template:
 **Goal.**

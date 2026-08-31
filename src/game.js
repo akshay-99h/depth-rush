@@ -27,6 +27,7 @@ const _right = new THREE.Vector3();
 const _desired = new THREE.Vector3();
 const _camWant = new THREE.Vector3();
 const _look = new THREE.Vector3();
+const _back = new THREE.Vector3();
 const _tmp = new THREE.Vector3();
 const _euler = new THREE.Euler(0, 0, 0, 'YXZ');
 const _yawEuler = new THREE.Euler(0, 0, 0, 'YXZ');
@@ -54,6 +55,7 @@ export class Game {
     this.kelp = [];
     this.surface = null;
     this.surfaceBase = null;
+    this.colliders = [];
     this.move = moveStick;
     this.look = lookStick;
     this.audio = audio;
@@ -110,6 +112,28 @@ export class Game {
     this.kelp = env.kelp ?? [];
     this.surface = env.surface;
     this.surfaceBase = env.surfaceBase;
+    this.colliders = env.colliders ?? [];
+  }
+
+  // How far back the camera may sit before something solid gets between it and
+  // the diver. Analytic ray/sphere against the boulders we already track — far
+  // cheaper than raycasting the scene graph, and they are what actually clips.
+  _cameraReach(origin, dir, maxDist) {
+    let limit = maxDist;
+    const test = (cx, cy, cz, r) => {
+      const lx = cx - origin.x, ly = cy - origin.y, lz = cz - origin.z;
+      const tca = lx * dir.x + ly * dir.y + lz * dir.z;
+      const d2 = lx * lx + ly * ly + lz * lz - tca * tca;
+      const rr = r * r;
+      if (d2 > rr) return;
+      const thc = Math.sqrt(rr - d2);
+      const t0 = tca - thc;
+      if (t0 > 0.1 && t0 < limit) limit = t0;
+    };
+    for (const c of this.colliders) test(c.x, c.y, c.z, c.r + 0.5);
+    const rocks = this.state?.level?.rocks;
+    if (rocks) for (const r of rocks) test(r.x, r.y, r.z, (r.opened ? 0.5 : 0.95) + 0.5);
+    return limit;
   }
 
   // Exhaust bubbles, from a recycled pool — no allocation per frame.
@@ -160,13 +184,15 @@ export class Game {
   startRun(seed = randomSeed()) {
     this._clearLevel();
     const rng = makeRng(seed);
-    const level = generateLevel(rng);
+    const level = generateLevel(rng, this.colliders);
 
     const place = (o, mesh) => { o.mesh = mesh; mesh.position.set(o.x, o.y, o.z); this.group.add(mesh); };
     level.rocks.forEach((r) => place(r, MESHES.rock(r.shape)));
     level.parts.forEach((p) => place(p, MESHES.part(p.id)));
     level.pickups.forEach((p) => place(p, MESHES[p.kind]()));
     level.enemies.forEach((e) => place(e, MESHES.enemy(e.type)));
+    level.anchors.forEach((a) => place(a, MESHES.anchor()));
+    level.crates.forEach((c) => place(c, MESHES.crate()));
 
     this.state = {
       seed,
@@ -202,6 +228,11 @@ export class Game {
       kick: 0,
       flyups: [],
       depthT: 0,
+      camDist: CONFIG.camera.distance,
+      planted: 0,
+      delivered: 0,
+      holdKind: null,
+      haulCrate: null,
     };
 
     this.diver.position.set(W.boatX, W.boatY - 4.0, W.boatZ);
@@ -214,6 +245,12 @@ export class Game {
   }
 
   _clearLevel() {
+    // A carried crate is parented to the diver, not the level group, so it
+    // would otherwise survive into the next run.
+    if (this.state?.haulCrate?.mesh) {
+      this.diver.remove(this.state.haulCrate.mesh);
+      this.state.haulCrate = null;
+    }
     while (this.group.children.length) {
       const c = this.group.children.pop();
       c.traverse?.((n) => { n.geometry?.dispose?.(); n.material?.dispose?.(); });
@@ -245,7 +282,7 @@ export class Game {
 
   /* ------------------------------------------------------------ boat logic */
 
-  canRepair() { return this.mode === 'boat' && this.state.carrying.length > 0; }
+  canRepair() { return this.boatAction.enabled; }
 
   setRepairing(on) {
     if (!this.state) return;
@@ -259,16 +296,30 @@ export class Game {
     this.o2Bar.visible = false;
     this.lamp.visible = false;
 
-    if (s.repairing && s.carrying.length) {
-      s.repairProgress += dt / CONFIG.repair.secondsPerPart;
+    if (s.repairing && this.boatAction.enabled) {
+      const secs = this.objective === 'beacon' ? CONFIG.objective.beacon.loadSeconds
+        : this.objective === 'haul' ? CONFIG.objective.haul.unloadSeconds
+        : CONFIG.repair.secondsPerPart;
+      s.repairProgress += dt / secs;
       if (s.repairProgress >= 1) {
-        const id = s.carrying.shift();
-        s.installed.push(id);
         s.repairProgress = 0;
         this.audio.installed();
-        this.hooks.onToast?.(`${PARTS.find((p) => p.id === id).label} fitted`);
-        if (s.installed.length >= this.partsTotal) return this._end('win', 'The boat sails.');
-        if (!s.carrying.length) this.setRepairing(false);
+        if (this.objective === 'beacon') {
+          s.carrying.push('beacon');
+          this.hooks.onToast?.(`Beacon aboard — ${s.carrying.length} loaded`);
+        } else if (this.objective === 'haul') {
+          s.carrying.shift();
+          s.delivered += 1;
+          this._stowCrate();
+          this.hooks.onToast?.(`Crate secured — ${s.delivered}/${this.partsTotal}`);
+          if (s.delivered >= this.partsTotal) return this._end('win', 'Cargo delivered. The boat sails.');
+        } else {
+          const id = s.carrying.shift();
+          s.installed.push(id);
+          this.hooks.onToast?.(`${PARTS.find((p) => p.id === id).label} fitted`);
+          if (s.installed.length >= this.partsTotal) return this._end('win', 'The boat sails.');
+        }
+        if (!this.boatAction.enabled) this.setRepairing(false);
       }
     } else {
       s.repairProgress = 0;
@@ -294,33 +345,59 @@ export class Game {
     _yawEuler.set(0, s.yaw, 0, 'YXZ');
     _right.set(1, 0, 0).applyEuler(_yawEuler);
 
-    // --- drill: aim at a boulder and push into it ---
-    let rock = null, rockDist = Infinity;
-    for (const r of s.level.rocks) {
-      if (r.opened) continue;
-      const d = Math.hypot(r.x - p.x, r.y - p.y, r.z - p.z);
-      if (d < rockDist) { rockDist = d; rock = r; }
-    }
+    // --- hold-to-act: push into a boulder to drill it, or into an anchor to
+    // plant a beacon. One gesture, one progress readout, two meanings.
     const stickLen = this.move.magnitude;
     _desired.set(0, 0, 0)
       .addScaledVector(_fwd, this.move.y)
       .addScaledVector(_right, this.move.x);
-    let drilling = false;
-    if (rock && rockDist < CONFIG.drill.contactRadius && stickLen > 0.3 && _desired.lengthSq() > 0.001) {
-      _tmp.set(rock.x - p.x, rock.y - p.y, rock.z - p.z).divideScalar(rockDist);
-      if (_tmp.dot(_desired.clone().normalize()) > CONFIG.drill.aimDot) drilling = true;
+    const pushing = stickLen > 0.3 && _desired.lengthSq() > 0.001;
+    const aimedAt = (o, reach) => {
+      const d = Math.hypot(o.x - p.x, o.y - p.y, o.z - p.z);
+      if (d > reach || d < 0.0001) return false;
+      _tmp.set(o.x - p.x, o.y - p.y, o.z - p.z).divideScalar(d);
+      return _tmp.dot(_look.copy(_desired).normalize()) > CONFIG.drill.aimDot;
+    };
+
+    let target = null, kind = null;
+    if (pushing && this.objective === 'beacon' && s.carrying.length) {
+      let best = null, bd = Infinity;
+      for (const a of s.level.anchors) {
+        if (a.planted) continue;
+        const d = Math.hypot(a.x - p.x, a.y - p.y, a.z - p.z);
+        if (d < bd) { bd = d; best = a; }
+      }
+      if (best && aimedAt(best, CONFIG.drill.contactRadius + 1.0)) { target = best; kind = 'anchor'; }
     }
-    if (drilling) {
-      if (s.drillRock !== rock) { s.drillRock = rock; s.drillProgress = 0; }
+    if (!target && pushing) {
+      let best = null, bd = Infinity;
+      for (const r of s.level.rocks) {
+        if (r.opened) continue;
+        const d = Math.hypot(r.x - p.x, r.y - p.y, r.z - p.z);
+        if (d < bd) { bd = d; best = r; }
+      }
+      if (best && aimedAt(best, CONFIG.drill.contactRadius)) { target = best; kind = 'rock'; }
+    }
+
+    const drilling = !!target;
+    if (target) {
+      if (s.drillRock !== target) { s.drillRock = target; s.drillProgress = 0; s.holdKind = kind; }
       const before = s.drillProgress;
-      s.drillProgress += dt / CONFIG.drill.seconds;
+      const secs = kind === 'anchor' ? CONFIG.objective.beacon.plantSeconds : CONFIG.drill.seconds;
+      s.drillProgress += dt / secs;
       if (Math.floor(s.drillProgress * 8) !== Math.floor(before * 8)) this.audio.drillTick();
-      rock.mesh.material.color.setHex(PALETTE.rockLit);
-      rock.mesh.rotation.z += dt * 3;
-      if (s.drillProgress >= 1) this._openRock(rock);
+      if (kind === 'rock') {
+        target.mesh.material.color.setHex(PALETTE.rockLit);
+        target.mesh.rotation.z += dt * 3;
+      }
+      if (s.drillProgress >= 1) {
+        if (kind === 'anchor') this._plantBeacon(target);
+        else this._openRock(target);
+      }
     } else {
-      if (s.drillRock) s.drillRock.mesh.material.color.setHex(PALETTE.rock);
+      if (s.drillRock && s.holdKind === 'rock') s.drillRock.mesh.material.color.setHex(PALETTE.rock);
       s.drillRock = null;
+      s.holdKind = null;
       s.drillProgress = 0;
     }
 
@@ -337,10 +414,12 @@ export class Game {
 
     // --- movement, relative to where you are looking ---
     if (s.stunTimer > 0) s.stunTimer -= dt;
+    const hauling = this.objective === 'haul' && s.carrying.length > 0;
     const speed = CONFIG.diver.speed
       * (1 + s.finStacks * CONFIG.fins.speedBonus)
       * (s.boosting ? CONFIG.boost.speedMultiplier : 1)
-      * (s.stunTimer > 0 ? 0.45 : 1);
+      * (s.stunTimer > 0 ? 0.45 : 1)
+      * (hauling ? CONFIG.objective.haul.speedFactor : 1);
     if (_desired.lengthSq() > 1) _desired.normalize();
     _desired.multiplyScalar(speed);
     if (drilling) _desired.multiplyScalar(0.12);          // hold station on the rock
@@ -352,17 +431,20 @@ export class Game {
     p.z = clamp(p.z, -W.halfDepth, W.halfDepth);
     p.y = clamp(p.y, W.seabedY + 0.7, W.surfaceY - 0.3);
 
-    // Rocks are solid: push the diver out along the contact normal.
-    for (const r of s.level.rocks) {
-      const solid = (r.opened ? 0.5 : 0.92) + CONFIG.diver.bodyRadius;
-      _tmp.set(p.x - r.x, p.y - r.y, p.z - r.z);
+    // Rock and scenery are both solid: push the diver out along the contact
+    // normal. Scenery used to be swim-through, which looked wrong and was also
+    // how the camera ended up inside boulders.
+    const pushOut = (cx, cy, cz, solid) => {
+      _tmp.set(p.x - cx, p.y - cy, p.z - cz);
       const d = _tmp.length();
-      if (d >= solid || d === 0) continue;
+      if (d >= solid || d === 0) return;
       _tmp.divideScalar(d);
-      p.set(r.x, r.y, r.z).addScaledVector(_tmp, solid);
+      p.set(cx, cy, cz).addScaledVector(_tmp, solid);
       const into = s.velocity.dot(_tmp);
       if (into < 0) s.velocity.addScaledVector(_tmp, -into);
-    }
+    };
+    for (const r of s.level.rocks) pushOut(r.x, r.y, r.z, (r.opened ? 0.5 : 0.92) + CONFIG.diver.bodyRadius);
+    for (const c of this.colliders) pushOut(c.x, c.y, c.z, c.r + CONFIG.diver.bodyRadius);
 
     aimAlong(this.diver, _fwd.x, _fwd.y, _fwd.z);
 
@@ -391,6 +473,7 @@ export class Game {
       let drain = CONFIG.oxygen.baseDrain;
       if (drilling) drain *= CONFIG.oxygen.drillMultiplier;
       if (s.boosting) drain *= CONFIG.oxygen.boostMultiplier;
+      if (hauling) drain *= CONFIG.objective.haul.drainFactor;
       const before = s.oxygen;
       s.oxygen -= drain * dt;
       const lowAt = CONFIG.oxygen.max * CONFIG.oxygen.redBelow;
@@ -413,6 +496,22 @@ export class Game {
       part.taken = true;
       part.mesh.visible = false;
       this._takePart(part.id);
+    }
+    if (this.objective === 'haul' && !s.carrying.length) {
+      for (const c of s.level.crates) {
+        if (c.taken || Math.hypot(c.x - p.x, c.y - p.y, c.z - p.z) > R + 0.8) continue;
+        c.taken = true;
+        s.carrying.push('crate');
+        s.haulCrate = c;
+        // carry it under the diver so the load is visible
+        this.group.remove(c.mesh);
+        c.mesh.position.set(0, -1.0, 0);
+        c.mesh.scale.setScalar(0.8);
+        this.diver.add(c.mesh);
+        this.audio.partFound();
+        this.hooks.onToast?.('Crate on the line — you are slow now');
+        break;
+      }
     }
     for (const item of s.level.pickups) {
       if (item.taken || Math.hypot(item.x - p.x, item.y - p.y, item.z - p.z) > R) continue;
@@ -517,15 +616,25 @@ export class Game {
     if (s.canSurface && toBoat < W.surfaceRadius) {
       this.audio.surfaced();
       this.setMode('boat');
-      this.hooks.onToast?.(s.carrying.length ? 'Aboard — fit what you found' : 'Aboard — tank refilled');
+      // A survey only counts once it is called in from the deck, so the swim
+      // home still matters on a beacon dive.
+      if (this.objective === 'beacon' && s.planted >= this.partsTotal) {
+        return this._end('win', 'Survey called in. The boat sails.');
+      }
+      const a = this.boatAction;
+      this.hooks.onToast?.(a.enabled ? `Aboard — hold ${a.label}` : 'Aboard — tank refilled');
       return;
     }
 
     // --- sonar ---
-    const remaining = [
-      ...s.level.parts.filter((x) => !x.taken),
-      ...s.level.rocks.filter((r) => !r.opened && r.part),
-    ];
+    const remaining = this.objective === 'beacon'
+      ? (s.carrying.length ? s.level.anchors.filter((a) => !a.planted) : [])
+      : this.objective === 'haul'
+        ? (s.carrying.length ? [] : s.level.crates.filter((c) => !c.taken))
+        : [
+            ...s.level.parts.filter((x) => !x.taken),
+            ...s.level.rocks.filter((r) => !r.opened && r.part),
+          ];
     let near = null, nearD = Infinity;
     for (const o of remaining) {
       const d = Math.hypot(o.x - p.x, o.y - p.y, o.z - p.z);
@@ -540,6 +649,33 @@ export class Game {
     }
 
     if (s.oxygen <= 0) return this._end('loss', 'Your tank ran dry.');
+  }
+
+  _plantBeacon(anchor) {
+    const s = this.state;
+    anchor.planted = true;
+    s.planted += 1;
+    s.carrying.shift();
+    s.drillRock = null;
+    s.drillProgress = 0;
+    s.holdKind = null;
+    anchor.mesh.traverse((n) => {
+      if (n.userData.mast) n.visible = true;
+      if (n.userData.halo && n.material) n.material.color.setHex(PALETTE.ok);
+    });
+    this.audio.installed();
+    for (let i = 0; i < 6; i++) this._emitBubble(anchor.x, anchor.y + 0.5, anchor.z, true);
+    this.hooks.onToast?.(`Beacon planted — ${s.planted}/${this.partsTotal}`);
+  }
+
+  _stowCrate() {
+    const s = this.state;
+    if (!s.haulCrate) return;
+    const m = s.haulCrate.mesh;
+    this.diver.remove(m);
+    m.traverse?.((n) => { n.geometry?.dispose?.(); n.material?.dispose?.(); });
+    s.haulCrate.delivered = true;
+    s.haulCrate = null;
   }
 
   _openRock(rock) {
@@ -606,7 +742,7 @@ export class Game {
     s.outcome = outcome;
     s.reason = reason;
     s.breakdown = {
-      parts: s.installed.length * CONFIG.score.perPartInstalled,
+      parts: this.goalDone * CONFIG.score.perPartInstalled,
       closeCalls: s.closeCalls * CONFIG.score.perCloseCall,
       escape: outcome === 'win' ? Math.round(Math.max(0, s.timeLeft)) * CONFIG.score.perSecondOnEscape : 0,
     };
@@ -630,6 +766,22 @@ export class Game {
     this.camera.position.set(cx - 9, 4.5, 13);
     this.camera.lookAt(cx + 1, 1.2, 0);
     updateBoat(this.boat, this.clock + this.outro, 0);
+  }
+
+  // Last line of defence: if the camera ended a frame inside a solid, push it
+  // straight back out along the surface normal.
+  _evictCamera() {
+    const c = this.camera.position;
+    const evict = (cx, cy, cz, r) => {
+      _tmp.set(c.x - cx, c.y - cy, c.z - cz);
+      const d = _tmp.length();
+      if (d >= r || d === 0) return;
+      _tmp.divideScalar(d);
+      c.set(cx, cy, cz).addScaledVector(_tmp, r);
+    };
+    for (const o of this.colliders) evict(o.x, o.y, o.z, o.r + 0.25);
+    const rocks = this.state?.level?.rocks;
+    if (rocks) for (const r of rocks) evict(r.x, r.y, r.z, (r.opened ? 0.5 : 0.95) + 0.25);
   }
 
   /* --------------------------------------------------------------- update */
@@ -744,11 +896,26 @@ export class Game {
     if (this.mode === 'dive') {
       _euler.set(s.pitch, s.yaw, 0, 'YXZ');
       _fwd.set(0, 0, -1).applyEuler(_euler);
-      _camWant.copy(p).addScaledVector(_fwd, -CONFIG.camera.distance);
-      _camWant.y += CONFIG.camera.height;
+      // Pull the camera in when something would sit between it and the diver,
+      // and ease back out once the way is clear so it does not snap. The test
+      // runs along the true diver->camera segment, height lift included — testing
+      // the flat -forward ray left the camera off the line it had checked.
+      _back.copy(p).addScaledVector(_fwd, -CONFIG.camera.distance);
+      _back.y += CONFIG.camera.height;
+      _back.sub(p);
+      const full = _back.length() || 0.001;
+      _back.divideScalar(full);
+      const reach = this._cameraReach(p, _back, full);
+      const wanted = clamp(reach - 0.35, CONFIG.camera.minDistance, full);
+      // snap in immediately when blocked, ease back out when freed
+      s.camDist = wanted < s.camDist ? wanted : lerp(s.camDist, wanted, Math.min(1, dt * 2.5));
+      _camWant.copy(p).addScaledVector(_back, s.camDist);
       // never punch through the bed or pop out of the water
       _camWant.y = clamp(_camWant.y, W.seabedY + 1.0, W.surfaceY - 0.4);
       this.camera.position.lerp(_camWant, k);
+      // The lerp lags the target, so a fast turn can still drag it through a
+      // boulder for a frame. Shove it back out afterwards.
+      this._evictCamera();
       _look.copy(p).addScaledVector(_fwd, CONFIG.camera.lookAhead);
       this.camera.lookAt(_look);
     } else {
@@ -760,8 +927,38 @@ export class Game {
 
   /* ------------------------------------------------------------- readouts */
 
+  get objective() { return this.state?.level?.objective ?? 'salvage'; }
+
   get partsTotal() {
-    return this.state?.level?.activeParts?.length ?? PARTS.length;
+    const lv = this.state?.level;
+    if (!lv) return PARTS.length;
+    if (lv.objective === 'beacon') return lv.anchors.length;
+    if (lv.objective === 'haul') return lv.crates.length;
+    return lv.activeParts.length;
+  }
+
+  get goalDone() {
+    const s = this.state;
+    if (!s) return 0;
+    if (this.objective === 'beacon') return s.planted;
+    if (this.objective === 'haul') return s.delivered;
+    return s.installed.length;
+  }
+
+  // What the second button on the boat does, and whether it can do it.
+  get boatAction() {
+    const s = this.state;
+    if (!s) return { label: 'Repair', enabled: false, verb: 'fit' };
+    if (this.objective === 'beacon') {
+      const left = this.partsTotal - s.planted - s.carrying.length;
+      return { label: 'Load', verb: 'load',
+               enabled: this.mode === 'boat' && left > 0 && s.carrying.length < CONFIG.objective.beacon.maxLoad };
+    }
+    if (this.objective === 'haul') {
+      return { label: 'Unload', verb: 'unload',
+               enabled: this.mode === 'boat' && s.carrying.length > 0 };
+    }
+    return { label: 'Repair', verb: 'fit', enabled: this.mode === 'boat' && s.carrying.length > 0 };
   }
 
   get checklist() {

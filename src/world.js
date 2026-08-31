@@ -202,6 +202,7 @@ export function buildEnvironment(scene) {
 
   // Scenery boulders scattered over the bed for parallax and landmarks.
   const backdrop = add(new THREE.Group());
+  const colliders = [];
   for (let i = 0; i < Math.round(spanX * spanZ / 36); i++) {
     const s = 1.4 + Math.random() * 3.2;
     const b = new THREE.Mesh(
@@ -211,9 +212,12 @@ export function buildEnvironment(scene) {
     b.position.set((Math.random() - 0.5) * spanX * 1.15, W.seabedY + s * 0.35 - 0.6, (Math.random() - 0.5) * spanZ * 1.15);
     b.rotation.set(Math.random() * 3, Math.random() * 3, Math.random() * 3);
     backdrop.add(b);
+    // Scenery is what the trailing camera actually clips through, so it is
+    // handed back as sphere colliders for the camera to pull in against.
+    colliders.push({ x: b.position.x, y: b.position.y, z: b.position.z, r: s * 0.9 });
   }
 
-  return { motes, caustics, shafts, kelp, backdrop, floor, surface, surfaceBase };
+  return { motes, caustics, shafts, kelp, backdrop, floor, surface, surfaceBase, colliders };
 }
 
 /* ----------------------------------------------------------------- meshes */
@@ -442,7 +446,73 @@ function floodlightMesh() {
   return g;
 }
 
+// A surveyed anchor point: a ring on the bed with a pulsing marker. Once a
+// beacon is planted the mast rises and the colour flips to confirmed.
+function anchorMesh() {
+  const g = new THREE.Group();
+  const ring = new THREE.Mesh(
+    new THREE.TorusGeometry(1.0, 0.09, 8, 24),
+    new THREE.MeshStandardMaterial({ color: 0x2f8fb0, roughness: 0.5, metalness: 0.3,
+      emissive: 0x1c6a86, emissiveIntensity: 0.9 })
+  );
+  ring.rotation.x = -Math.PI / 2;
+  g.add(ring);
+  for (let i = 0; i < 4; i++) {
+    const a = (i / 4) * Math.PI * 2;
+    const stud = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.45, 8), mat.steel(0xcfe2e6));
+    stud.position.set(Math.cos(a) * 1.0, 0.22, Math.sin(a) * 1.0);
+    g.add(stud);
+  }
+  const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.09, 1.9, 8), mat.steel(0xe6f2f0));
+  mast.position.y = 0.95;
+  mast.visible = false;
+  mast.userData.mast = true;
+  g.add(mast);
+  const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.16, 10, 10),
+    new THREE.MeshBasicMaterial({ color: 0x9ffff0, fog: false }));
+  lamp.position.y = 1.95;
+  lamp.visible = false;
+  lamp.userData.mast = true;
+  g.add(lamp);
+  const halo = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: loadTextures().glow, color: 0x6fd8ff, blending: THREE.AdditiveBlending,
+    transparent: true, opacity: 0.3, depthWrite: false,
+  }));
+  halo.scale.set(3.0, 3.0, 1);
+  halo.position.y = 0.6;
+  halo.userData.halo = true;
+  g.add(halo);
+  return g;
+}
+
+// Cargo: heavy, strapped, and deliberately unglamorous.
+function crateMesh() {
+  const g = new THREE.Group();
+  const box = new THREE.Mesh(new THREE.BoxGeometry(1.25, 1.0, 1.05),
+    new THREE.MeshStandardMaterial({ map: loadTextures().hull, color: 0xb08a4a, roughness: 0.85, metalness: 0.1 }));
+  g.add(box);
+  const strap = () => new THREE.MeshStandardMaterial({ color: 0x2a3238, roughness: 0.8 });
+  for (const x of [-0.35, 0.35]) {
+    const s = new THREE.Mesh(new THREE.BoxGeometry(0.11, 1.04, 1.09), strap());
+    s.position.x = x;
+    g.add(s);
+  }
+  const lug = new THREE.Mesh(new THREE.TorusGeometry(0.17, 0.04, 6, 14), mat.steel(0xd8e2e4));
+  lug.position.y = 0.56;
+  lug.rotation.x = Math.PI / 2;
+  g.add(lug);
+  const halo = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: loadTextures().glow, color: 0xffb340, blending: THREE.AdditiveBlending,
+    transparent: true, opacity: 0.26, depthWrite: false,
+  }));
+  halo.scale.set(2.4, 2.4, 1);
+  g.add(halo);
+  return g;
+}
+
 export const MESHES = {
+  anchor: anchorMesh,
+  crate: crateMesh,
   boat: buildBoat,
   diver: diverMesh,
   enemy: enemyMesh,
@@ -465,16 +535,19 @@ export function makeDiverLamp() {
 
 // Every run reshuffles the seabed. Three of the five parts are sealed inside
 // rocks so the player has to spend air drilling, not just swimming.
-export function generateLevel(rng) {
+export function generateLevel(rng, scenery = []) {
   const sx = W.halfWidth - 2.0, sz = W.halfDepth - 2.0;
   const spot = (minUp, maxUp) => ({
     x: rng.range(-sx, sx),
     y: rng.range(W.seabedY + minUp, W.seabedY + maxUp),
     z: rng.range(-sz, sz),
   });
-  const clearOfBoat = (minUp, maxUp) => {
+  const inScenery = (p, pad) => scenery.some((c) => Math.hypot(c.x - p.x, c.y - p.y, c.z - p.z) < c.r + pad);
+  const clearOfBoat = (minUp, maxUp, pad = 1.6) => {
     let p = spot(minUp, maxUp), guard = 0;
-    while (guard++ < 30 && Math.hypot(p.x - W.boatX, p.z - W.boatZ) < 4.0) p = spot(minUp, maxUp);
+    while (guard++ < 60 && (Math.hypot(p.x - W.boatX, p.z - W.boatZ) < 4.0 || inScenery(p, pad))) {
+      p = spot(minUp, maxUp);
+    }
     return p;
   };
 
@@ -492,7 +565,7 @@ export function generateLevel(rng) {
 
   const rocks = [];
   for (let i = 0; i < CONFIG.spawn.rocks; i++) {
-    const p = clearOfBoat(0.5, 2.4);       // boulders rest on the bed
+    const p = clearOfBoat(0.5, 2.4, 2.2);  // boulders rest on the bed, clear of scenery
     rocks.push({ ...p, opened: false, part: sealed[i] ?? null, yieldsTank: !sealed[i], shape: i });
   }
 
@@ -506,7 +579,11 @@ export function generateLevel(rng) {
     return p;
   };
 
-  const parts = loose.map((id) => ({ ...clearOfRocks(), id, taken: false }));
+  // Only a salvage dive scatters boat parts. The other objectives leave the
+  // rocks as air pockets and put their own targets on the bed.
+  const salvage = (CONFIG.objectiveKind ?? 'salvage') === 'salvage';
+  if (!salvage) for (const r of rocks) { r.part = null; r.yieldsTank = true; }
+  const parts = salvage ? loose.map((id) => ({ ...clearOfRocks(), id, taken: false })) : [];
 
   const pickups = [];
   const add = (kind, n) => { for (let i = 0; i < n; i++) pickups.push({ ...clearOfRocks(), kind, taken: false }); };
@@ -542,5 +619,20 @@ export function generateLevel(rng) {
     });
   });
 
-  return { rocks, parts, pickups, enemies, activeParts };
+  const anchors = [];
+  const crates = [];
+  if (CONFIG.objectiveKind === 'beacon') {
+    for (let i = 0; i < wanted; i++) {
+      const p = clearOfBoat(0.4, 0.9, 2.4);      // anchors sit on the bed
+      anchors.push({ ...p, planted: false });
+    }
+  } else if (CONFIG.objectiveKind === 'haul') {
+    for (let i = 0; i < wanted; i++) {
+      const p = clearOfBoat(0.7, 1.4, 2.4);
+      crates.push({ ...p, taken: false, delivered: false });
+    }
+  }
+
+  return { rocks, parts, pickups, enemies, activeParts, anchors, crates,
+           objective: CONFIG.objectiveKind ?? 'salvage' };
 }
