@@ -1,7 +1,7 @@
 // Screen flow and wiring. The lofi's seven screens map to five states here:
 // landing -> ftux -> boat <-> dive -> end, with settings as a modal over any of them.
 import { createRenderer, createCamera, createScene } from './world.js';
-import { Joystick } from './joystick.js';
+import { Stick, bindHold, bindKeyboard } from './joystick.js';
 import { Audio } from './audio.js';
 import { Game } from './game.js';
 import { Hud } from './hud.js';
@@ -14,9 +14,10 @@ const $ = (id) => document.getElementById(id);
 const canvas = $('game');
 const renderer = createRenderer(canvas);
 const camera = createCamera();
-const { scene, motes, caustics, shafts, kelp } = createScene();
+const { scene, motes, caustics, shafts, kelp, sun, ambient, surface, surfaceBase } = createScene();
 const audio = new Audio();
-const joystick = new Joystick($('joystick'), $('stick'), $('btn-boost'));
+const moveStick = new Stick($('move-stick'), $('move-stick').querySelector('.stick-knob'));
+const lookStick = new Stick($('look-stick'), $('look-stick').querySelector('.stick-knob'));
 const hud = new Hud();
 const minimap = new Minimap($('minimap'));
 
@@ -24,7 +25,8 @@ const SCREENS = ['landing', 'ftux', 'boat', 'dive', 'end'];
 let screen = 'landing';
 
 const game = new Game({
-  scene, camera, motes, caustics, shafts, kelp, joystick, audio, minimap,
+  scene, camera, motes, caustics, shafts, kelp, sun, ambient, surface, surfaceBase,
+  moveStick, lookStick, audio, minimap,
   hooks: {
     onToast: (t) => hud.toastMessage(t),
     onMode: (mode) => { if (screen === 'boat' || screen === 'dive') showScreen(mode); },
@@ -37,7 +39,7 @@ function showScreen(next) {
   for (const id of SCREENS) $(`screen-${id}`).dataset.on = String(id === next);
   $('hud').dataset.on = String(next === 'boat' || next === 'dive');
   $('ship-progress').style.display = next === 'boat' || next === 'dive' ? '' : 'none';
-  if (next !== 'dive') joystick.reset();
+  if (next !== 'dive') { moveStick.reset(); lookStick.reset(); }
 }
 
 function resize() {
@@ -90,6 +92,9 @@ function beginRun() {
   game.startRun();
   showScreen('boat');
 }
+
+bindHold($('btn-boost'), (on) => { game.boostHeld = on; });
+bindKeyboard(moveStick, lookStick, (on) => { game.boostHeld = on; });
 
 $('btn-dive').addEventListener('click', () => {
   audio.unlock();
@@ -191,20 +196,23 @@ requestAnimationFrame(frame);
 
 // Playtest hook: drive the sim by hand, jump screens, inspect state.
 globalThis.DepthRush = {
-  game, audio, minimap, hud,
+  game, audio, minimap, hud, moveStick, lookStick,
   screen: () => screen,
   go: showScreen,
   begin: beginRun,
   step: (dt = 1 / 60, n = 1) => { for (let i = 0; i < n; i++) game.update(dt); return globalThis.DepthRush.state; },
-  moveTo: (x, y) => { game.diver.position.set(x, y, 0); game.state.velocity.set(0, 0); },
-  stick: (x, y, mag = 1) => { joystick.x = x; joystick.y = y; joystick.magnitude = mag; },
+  moveTo: (x, y, z = 0) => { game.diver.position.set(x, y, z); game.state.velocity.set(0, 0, 0); },
+  stick: (x, y, mag = 1) => moveStick.setVector(x, y, mag),
+  lookAt: (yaw, pitch) => { game.state.yaw = yaw; game.state.pitch = pitch; },
+  boost: (on) => { game.boostHeld = on; },
   get level() { return game.state.level; },
   get state() {
     const s = game.state;
     return {
       mode: game.mode, screen, seed: s.seed,
       timeLeft: s.timeLeft, oxygen: s.oxygen,
-      x: game.diver.position.x, y: game.diver.position.y,
+      x: game.diver.position.x, y: game.diver.position.y, z: game.diver.position.z,
+      yaw: s.yaw, pitch: s.pitch, breathing: s.breathing, depthT: s.depthT,
       carrying: [...s.carrying], installed: [...s.installed],
       closeCalls: s.closeCalls, dives: s.dives,
       drilling: !!s.drillRock, drillProgress: s.drillProgress,

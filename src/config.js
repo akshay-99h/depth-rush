@@ -1,31 +1,44 @@
 // Depth Rush — all gameplay tunables in one place.
-// Numbers follow the UI lofi where the two disagree with the GDD (8-minute storm,
-// five named parts, joystick control, boat/dive split).
+// The world is a 3D volume: X and Z span the seabed, Y is depth.
 
 export const CONFIG = {
   run: {
     stormSeconds: 480,        // "The storm returns in 8 minutes."
-    lateGameSeconds: 90,      // visual pressure inside the last 90s
-    criticalSeconds: 30,      // timer goes red and the water goes black
+    lateGameSeconds: 90,
+    criticalSeconds: 30,
   },
 
   world: {
     surfaceY: 0,
-    seabedY: -26,
-    halfWidth: 14,
+    seabedY: -28,
+    halfWidth: 16,            // X extent
+    halfDepth: 16,            // Z extent
     boatX: 0,
-    boatY: 0,           // the workboat model puts its waterline at the origin
-    surfaceRadius: 3.0,   // the workboat is ~7.6m long, so the surfacing zone grew with it       // swim this close to the boat to surface
+    boatZ: 0,
+    boatY: 0,
+    surfaceRadius: 4.0,       // swim this close to the boat to climb aboard
+  },
+
+  camera: {
+    distance: 6.2,            // third-person trail distance
+    height: 1.5,              // lifted above the diver's head
+    lookAhead: 3.0,
+    followLerp: 7.0,
+    fov: 62,
+  },
+
+  look: {
+    yawSpeed: 2.4,            // radians / second at full stick
+    pitchSpeed: 1.7,
+    pitchClamp: 1.2,          // ~69 degrees, so you never flip over the top
   },
 
   diver: {
-    // 2.8 m/s is a hard fin kick. It was 5.0, which crossed the whole map in six
-    // seconds — that is what made the world feel small and the tank feel irrelevant,
-    // not the dimensions. Distance has to cost something for oxygen to be a resource.
     speed: 2.8,               // metres / second at full stick
     accel: 7.5,
     drag: 2.2,
-    collectRadius: 1.0,
+    collectRadius: 1.4,
+    bodyRadius: 0.5,
   },
 
   oxygen: {
@@ -35,63 +48,68 @@ export const CONFIG = {
     drillMultiplier: 2,
     boostMultiplier: 3,
     tankRefill: 40,
+    // Breaking the surface refills the tank. Air is free up top — what it costs
+    // is the storm clock, and the swim back down.
+    surfaceDepth: 2.2,        // within this of the surface counts as breathing
+    surfaceRefillPerSec: 30,
     amberBelow: 0.40,
     redBelow: 0.15,
   },
 
   boost: {
-    speedMultiplier: 2.1,     // 5.9 m/s — comfortably above a shark's chase speed
-    // Long enough, and recharging fast enough, that the duty cycle actually
-    // averages above a shark's chase speed. At 1.8s/2.4s it did not, so boost
-    // could never break a pursuit — you just died slightly later.
+    speedMultiplier: 2.1,
     maxHold: 2.4,
     cooldown: 2.0,
   },
 
   drill: {
-    seconds: 1.6,             // push the stick into a rock this long to crack it
-    contactRadius: 1.85,      // collision holds the diver ~1.32m off a boulder,
-                              // so contact must reach past that to register
+    seconds: 1.6,
+    contactRadius: 2.1,
+    aimDot: 0.35,             // how squarely you must face a rock to bite into it
   },
 
   repair: {
-    secondsPerPart: 2.6,      // held on the boat, with the storm clock still running
+    secondsPerPart: 2.6,
   },
 
-  fins: {
-    speedBonus: 0.16,
-    maxStacks: 3,
-  },
-
-  floodlight: {
-    radiusBonus: 3.0,
-    maxStacks: 3,
-  },
+  fins: { speedBonus: 0.16, maxStacks: 3 },
+  floodlight: { radiusBonus: 3.5, maxStacks: 3 },
 
   shark: {
-    count: 3,
-    patrolSpeed: 1.9,         // slower than a swimming diver: you can outpace a cruise
-    chaseSpeed: 3.2,          // faster than the diver: only boost breaks a pursuit
-    detectRadius: 6.0,        // starts a pursuit — well outside the danger ring
-    dangerRadius: 3.4,        // warning pulse, and where a close call is earned
-    catchRadius: 0.85,
-    loseInterestAfter: 2.5,   // seconds of pursuit after losing contact
-    turnRate: 2.6,            // how fast it can swing onto a new heading
-    facingDeadzone: 0.35,     // m/s of lateral speed before it flips to face the other way
-    closeCallDwell: 0.45,     // must stay in the danger ring this long to bank a close call
+    count: 4,
+    patrolSpeed: 1.9,
+    chaseSpeed: 3.2,
+    detectRadius: 6.0,
+    dangerRadius: 3.4,
+    catchRadius: 0.95,
+    loseInterestAfter: 2.5,
+    turnRate: 2.6,
+    closeCallDwell: 0.45,
   },
 
   spawn: {
-    partsInRocks: 3,          // of the five; the rest lie loose on the seabed
-    rocks: 11,
+    partsInRocks: 3,
+    rocks: 14,
     tanks: 5,
     fins: 3,
     floodlights: 3,
   },
 
+  // How hard the water closes in with depth. 0 at the surface, 1 on the bed.
+  depthFade: {
+    fogNearSurface: 26,
+    fogFarSurface: 70,
+    fogNearDeep: 5,
+    fogFarDeep: 20,
+    ambientSurface: 1.25,
+    ambientDeep: 0.16,
+    sunSurface: 2.1,
+    sunDeep: 0.12,
+  },
+
   score: {
     perPartInstalled: 200,
     perCloseCall: 50,
-    perSecondOnEscape: 5,     // only paid if the boat actually sails
+    perSecondOnEscape: 5,
   },
 };

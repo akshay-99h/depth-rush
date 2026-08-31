@@ -1,8 +1,13 @@
 // The simulation. Two modes share one world and one clock:
 //   'boat' — moored at the surface, fitting parts while the storm closes in
-//   'dive' — under the water, on the stick
+//   'dive' — under the water, on the sticks
 // The storm timer never stops in either mode. That is the whole game: every
 // second spent installing a part is a second not spent finding the next one.
+//
+// The world is a 3D volume. The left stick swims relative to where you are
+// looking; the right (eye) stick turns your head. Swimming follows your pitch,
+// so looking down and pushing forward takes you down — there is no separate
+// ascend/descend control to learn.
 import * as THREE from '../vendor/three.module.js';
 import { CONFIG } from './config.js';
 import { PARTS, PART_COUNT } from './parts.js';
@@ -11,50 +16,74 @@ import { generateLevel, MESHES, PALETTE, makeDiverLamp, loadTextures } from './w
 import { updateBoat } from './boat.js';
 
 const W = CONFIG.world;
+const DF = CONFIG.depthFade;
 const clamp = THREE.MathUtils.clamp;
+const lerp = THREE.MathUtils.lerp;
+
+// Scratch vectors — the update loop must not allocate.
+const _fwd = new THREE.Vector3();
+const _right = new THREE.Vector3();
+const _desired = new THREE.Vector3();
+const _camWant = new THREE.Vector3();
+const _look = new THREE.Vector3();
+const _tmp = new THREE.Vector3();
+const _euler = new THREE.Euler(0, 0, 0, 'YXZ');
+const _yawEuler = new THREE.Euler(0, 0, 0, 'YXZ');
+const _colShallow = new THREE.Color();
+const _colDeep = new THREE.Color();
+
+// Aim a model whose length runs along +X down a direction vector.
+function aimAlong(obj, x, y, z) {
+  const len = Math.hypot(x, y, z);
+  if (len < 0.001) return;
+  const pitch = Math.asin(clamp(y / len, -1, 1));
+  const yaw = Math.atan2(-x, -z);
+  obj.rotation.set(0, yaw + Math.PI / 2, pitch, 'YZX');
+}
 
 export class Game {
-  constructor({ scene, camera, motes, caustics, shafts, kelp, joystick, audio, minimap, hooks = {} }) {
+  constructor({ scene, camera, motes, caustics, shafts, kelp, sun, ambient, surface, surfaceBase,
+                moveStick, lookStick, audio, minimap, hooks = {} }) {
     this.scene = scene;
     this.camera = camera;
     this.motes = motes;
     this.caustics = caustics ?? [];
-    this.shafts = shafts?.children ?? [];   // createScene hands back a Group
+    this.shafts = shafts?.children ?? [];
     this.kelp = kelp ?? [];
-    this.minimap = minimap ?? null;
-    this.stick = joystick;
+    this.sun = sun;
+    this.ambient = ambient;
+    this.surface = surface;
+    this.surfaceBase = surfaceBase;
+    this.move = moveStick;
+    this.look = lookStick;
     this.audio = audio;
+    this.minimap = minimap ?? null;
     this.hooks = hooks;
+    this.boostHeld = false;
 
     this.group = new THREE.Group();
     scene.add(this.group);
 
     this.boat = MESHES.boat();
-    this.boat.position.set(W.boatX, W.boatY, 0);
+    this.boat.position.set(W.boatX, W.boatY, W.boatZ);
     scene.add(this.boat);
 
     this.diver = MESHES.diver();
     scene.add(this.diver);
 
-    // The diver carries a lamp, so swimming into a dark pocket actually reveals
-    // what is in it. Floodlight pickups widen its reach.
     this.lamp = makeDiverLamp();
     this.diver.add(this.lamp);
 
-    this.bubbles = this._makeBubbles();
-    scene.add(this.bubbles);
-    this.clock = 0;
-
-    // Oxygen reads off a bar pinned above the diver rather than a corner gauge —
-    // the lofi puts it there, and it keeps the player's eyes on the danger.
+    // Oxygen reads off a bar pinned above the diver. It billboards to the camera
+    // so it stays legible from any angle.
     this.o2Bar = new THREE.Group();
-    const back = new THREE.Mesh(new THREE.PlaneGeometry(1.4, 0.17), new THREE.MeshBasicMaterial({ color: 0x04141c, fog: false, transparent: true, opacity: 0.75 }));
-    this.o2Fill = new THREE.Mesh(new THREE.PlaneGeometry(1.32, 0.11), new THREE.MeshBasicMaterial({ color: PALETTE.ok, fog: false }));
+    const back = new THREE.Mesh(new THREE.PlaneGeometry(1.4, 0.17),
+      new THREE.MeshBasicMaterial({ color: 0x04141c, fog: false, transparent: true, opacity: 0.75 }));
+    this.o2Fill = new THREE.Mesh(new THREE.PlaneGeometry(1.32, 0.11),
+      new THREE.MeshBasicMaterial({ color: PALETTE.ok, fog: false }));
     this.o2Fill.position.z = 0.01;
     this.o2Bar.add(back, this.o2Fill);
 
-    // Sonar reads as a chevron above the tank bar that swings toward the nearest
-    // part still out there, brightening as it closes. No extra HUD chip needed.
     this.sonarTick = new THREE.Mesh(
       new THREE.ConeGeometry(0.16, 0.34, 3),
       new THREE.MeshBasicMaterial({ color: PALETTE.signal, fog: false, transparent: true, opacity: 0.9 })
@@ -63,81 +92,56 @@ export class Game {
     this.o2Bar.add(this.sonarTick);
     scene.add(this.o2Bar);
 
+    this.bubbles = this._makeBubbles();
+    scene.add(this.bubbles);
+
     this.state = null;
     this.mode = 'boat';
     this.paused = false;
     this.outro = null;
+    this.clock = 0;
   }
 
-  // Exhaust bubbles. Recycled from a fixed pool — no allocation per frame.
+  // Exhaust bubbles, from a recycled pool — no allocation per frame.
   _makeBubbles() {
     const g = new THREE.Group();
-    const geo = new THREE.PlaneGeometry(0.12, 0.12);
     const tex = loadTextures().glow;
-    for (let i = 0; i < 26; i++) {
-      const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({
+    for (let i = 0; i < 30; i++) {
+      const s = new THREE.Sprite(new THREE.SpriteMaterial({
         map: tex, color: 0xdff6ff, transparent: true, opacity: 0,
         depthWrite: false, blending: THREE.AdditiveBlending,
       }));
-      m.userData = { life: 0, ttl: 0, speed: 0, sway: 0 };
-      g.add(m);
+      s.userData = { life: 0, ttl: 0, speed: 0, sway: 0, size: 0.2 };
+      g.add(s);
     }
     g.userData.cursor = 0;
     return g;
   }
 
-  _emitBubble(x, y, big = false) {
+  _emitBubble(x, y, z, big = false) {
     const g = this.bubbles;
-    const m = g.children[g.userData.cursor];
+    const s = g.children[g.userData.cursor];
     g.userData.cursor = (g.userData.cursor + 1) % g.children.length;
-    m.position.set(x + (Math.random() - 0.5) * 0.25, y + (Math.random() - 0.5) * 0.2, 0.1);
-    m.scale.setScalar((big ? 1.2 : 0.55) + Math.random() * 0.7);
-    m.userData.life = 0;
-    m.userData.ttl = 1.1 + Math.random() * 1.2;
-    m.userData.speed = 0.9 + Math.random() * 0.9;
-    m.userData.sway = Math.random() * Math.PI * 2;
+    s.position.set(x + (Math.random() - 0.5) * 0.3, y + (Math.random() - 0.5) * 0.2, z + (Math.random() - 0.5) * 0.3);
+    s.userData.size = (big ? 0.22 : 0.11) + Math.random() * 0.12;
+    s.userData.life = 0;
+    s.userData.ttl = 1.1 + Math.random() * 1.2;
+    s.userData.speed = 0.9 + Math.random() * 0.9;
+    s.userData.sway = Math.random() * Math.PI * 2;
   }
 
   _updateBubbles(dt) {
-    for (const m of this.bubbles.children) {
-      const u = m.userData;
-      if (u.life >= u.ttl) { m.material.opacity = 0; continue; }
+    for (const s of this.bubbles.children) {
+      const u = s.userData;
+      if (u.life >= u.ttl) { s.material.opacity = 0; continue; }
       u.life += dt;
       const t = u.life / u.ttl;
-      m.position.y += u.speed * dt;
-      m.position.x += Math.sin(u.sway + u.life * 5) * 0.35 * dt;
-      m.material.opacity = Math.sin(t * Math.PI) * 0.55;
-    }
-  }
-
-  // A part sealed in a rock has no mesh until the rock cracks. Without this the
-  // only feedback was a toast, so drilling felt like nothing happened.
-  _spawnFlyup(id, x, y) {
-    const m = MESHES.part(id);
-    m.position.set(x, y, 0.35);
-    this.group.add(m);
-    this.state.flyups.push({ mesh: m, t: 0 });
-    for (let i = 0; i < 6; i++) this._emitBubble(x, y, true);
-  }
-
-  _updateFlyups(dt) {
-    const s = this.state;
-    if (!s.flyups.length) return;
-    const p = this.diver.position;
-    for (let i = s.flyups.length - 1; i >= 0; i--) {
-      const f = s.flyups[i];
-      f.t += dt / 0.75;
-      if (f.t >= 1) {
-        this.group.remove(f.mesh);
-        f.mesh.traverse((n) => { n.geometry?.dispose?.(); n.material?.dispose?.(); });
-        s.flyups.splice(i, 1);
-        continue;
-      }
-      const e = f.t * f.t;                       // ease in, so it lingers then darts home
-      f.mesh.position.x += (p.x - f.mesh.position.x) * e * 0.35;
-      f.mesh.position.y += (p.y + 0.4 - f.mesh.position.y) * e * 0.35;
-      f.mesh.rotation.z += dt * 5;
-      f.mesh.scale.setScalar(1 + Math.sin(f.t * Math.PI) * 0.5 - f.t * 0.55);
+      s.position.y += u.speed * dt;
+      s.position.x += Math.sin(u.sway + u.life * 5) * 0.35 * dt;
+      s.position.z += Math.cos(u.sway + u.life * 4) * 0.3 * dt;
+      s.material.opacity = Math.sin(t * Math.PI) * 0.5;
+      const sc = u.size * (0.7 + t * 0.6);
+      s.scale.set(sc, sc, 1);
     }
   }
 
@@ -148,7 +152,7 @@ export class Game {
     const rng = makeRng(seed);
     const level = generateLevel(rng);
 
-    const place = (o, mesh) => { o.mesh = mesh; mesh.position.set(o.x, o.y, 0); this.group.add(mesh); };
+    const place = (o, mesh) => { o.mesh = mesh; mesh.position.set(o.x, o.y, o.z); this.group.add(mesh); };
     level.rocks.forEach((r) => place(r, MESHES.rock(r.shape)));
     level.parts.forEach((p) => place(p, MESHES.part(p.id)));
     level.pickups.forEach((p) => place(p, MESHES[p.kind]()));
@@ -159,10 +163,12 @@ export class Game {
       level,
       timeLeft: CONFIG.run.stormSeconds,
       oxygen: CONFIG.oxygen.max,
-      velocity: new THREE.Vector2(),
-      carrying: [],            // part ids in hand
-      installed: [],           // part ids fitted to the boat
-      found: new Set(),        // part ids ever recovered
+      velocity: new THREE.Vector3(),
+      yaw: 0,
+      pitch: -0.35,            // start looking slightly down, toward the work
+      carrying: [],
+      installed: [],
+      found: new Set(),
       closeCalls: 0,
       finStacks: 0,
       lightStacks: 0,
@@ -175,6 +181,7 @@ export class Game {
       repairProgress: 0,
       dives: 0,
       sharkThreat: false,
+      breathing: false,
       canSurface: false,
       sonar: null,
       outcome: null,
@@ -183,13 +190,14 @@ export class Game {
       bubbleTimer: 0,
       kick: 0,
       flyups: [],
+      depthT: 0,
     };
-    this.minimap?.reset();
 
-    this.diver.position.set(W.boatX, W.boatY - 2.4, 0);
-    this.boat.position.set(W.boatX, W.boatY, 0);
-    this.boat.rotation.z = 0;
+    this.diver.position.set(W.boatX, W.boatY - 4.0, W.boatZ);
+    this.boat.position.set(W.boatX, W.boatY, W.boatZ);
+    this.boat.rotation.set(0, 0, 0);
     this.outro = null;
+    this.minimap?.reset();
     this.setMode('boat');
     this.paused = false;
   }
@@ -198,8 +206,6 @@ export class Game {
     while (this.group.children.length) {
       const c = this.group.children.pop();
       c.traverse?.((n) => { n.geometry?.dispose?.(); n.material?.dispose?.(); });
-      c.geometry?.dispose?.();
-      c.material?.dispose?.();
     }
   }
 
@@ -208,26 +214,27 @@ export class Game {
     const s = this.state;
     if (mode === 'dive') {
       s.dives += 1;
-      // Enter the water just under the keel, tank topped off.
-      this.diver.position.set(W.boatX, W.boatY - 4.0, 0);
-      s.velocity.set(0, 0);
+      this.diver.position.set(W.boatX, W.boatY - 4.0, W.boatZ);
+      s.velocity.set(0, 0, 0);
       s.oxygen = CONFIG.oxygen.max;
-      s.canSurface = false;   // must clear the boat before surfacing counts
-      this.stick.reset();
-    } else {
+      s.yaw = 0;
+      s.pitch = -0.5;
+      s.canSurface = false;    // must clear the boat before surfacing counts
+    }
+    if (mode === 'boat') {
       s.drillRock = null;
       s.drillProgress = 0;
       s.sharkThreat = false;
-      this.stick.reset();
+      s.breathing = false;
     }
+    this.move.reset();
+    this.look.reset();
     this.hooks.onMode?.(mode);
   }
 
   /* ------------------------------------------------------------ boat logic */
 
-  canRepair() {
-    return this.mode === 'boat' && this.state.carrying.length > 0;
-  }
+  canRepair() { return this.mode === 'boat' && this.state.carrying.length > 0; }
 
   setRepairing(on) {
     if (!this.state) return;
@@ -248,8 +255,7 @@ export class Game {
         s.installed.push(id);
         s.repairProgress = 0;
         this.audio.installed();
-        const part = PARTS.find((p) => p.id === id);
-        this.hooks.onToast?.(`${part.label} fitted`);
+        this.hooks.onToast?.(`${PARTS.find((p) => p.id === id).label} fitted`);
         if (s.installed.length >= PART_COUNT) return this._end('win', 'The boat sails.');
         if (!s.carrying.length) this.setRepairing(false);
       }
@@ -267,26 +273,37 @@ export class Game {
     this.o2Bar.visible = true;
     this.lamp.visible = true;
 
-    // --- drill: push the stick into a rock and hold ---
-    const stickLen = this.stick.magnitude;
+    // --- look: the eye stick turns the head ---
+    s.yaw -= this.look.x * CONFIG.look.yawSpeed * dt;
+    s.pitch = clamp(s.pitch + this.look.y * CONFIG.look.pitchSpeed * dt,
+                    -CONFIG.look.pitchClamp, CONFIG.look.pitchClamp);
+
+    _euler.set(s.pitch, s.yaw, 0, 'YXZ');
+    _fwd.set(0, 0, -1).applyEuler(_euler);
+    _yawEuler.set(0, s.yaw, 0, 'YXZ');
+    _right.set(1, 0, 0).applyEuler(_yawEuler);
+
+    // --- drill: aim at a boulder and push into it ---
     let rock = null, rockDist = Infinity;
     for (const r of s.level.rocks) {
       if (r.opened) continue;
-      const d = Math.hypot(r.x - p.x, r.y - p.y);
+      const d = Math.hypot(r.x - p.x, r.y - p.y, r.z - p.z);
       if (d < rockDist) { rockDist = d; rock = r; }
     }
+    const stickLen = this.move.magnitude;
+    _desired.set(0, 0, 0)
+      .addScaledVector(_fwd, this.move.y)
+      .addScaledVector(_right, this.move.x);
     let drilling = false;
-    if (rock && rockDist < CONFIG.drill.contactRadius && stickLen > 0.3) {
-      const dx = (rock.x - p.x) / (rockDist || 1);
-      const dy = (rock.y - p.y) / (rockDist || 1);
-      if (this.stick.x * dx + this.stick.y * dy > 0.35) drilling = true;
+    if (rock && rockDist < CONFIG.drill.contactRadius && stickLen > 0.3 && _desired.lengthSq() > 0.001) {
+      _tmp.set(rock.x - p.x, rock.y - p.y, rock.z - p.z).divideScalar(rockDist);
+      if (_tmp.dot(_desired.clone().normalize()) > CONFIG.drill.aimDot) drilling = true;
     }
     if (drilling) {
       if (s.drillRock !== rock) { s.drillRock = rock; s.drillProgress = 0; }
+      const before = s.drillProgress;
       s.drillProgress += dt / CONFIG.drill.seconds;
-      if (Math.floor(s.drillProgress * 8) !== Math.floor((s.drillProgress - dt / CONFIG.drill.seconds) * 8)) {
-        this.audio.drillTick();
-      }
+      if (Math.floor(s.drillProgress * 8) !== Math.floor(before * 8)) this.audio.drillTick();
       rock.mesh.material.color.setHex(PALETTE.rockLit);
       rock.mesh.rotation.z += dt * 3;
       if (s.drillProgress >= 1) this._openRock(rock);
@@ -297,7 +314,7 @@ export class Game {
     }
 
     // --- boost ---
-    const wantsBoost = this.stick.boostHeld && s.boostReady && s.boostCharge > 0;
+    const wantsBoost = this.boostHeld && s.boostReady && s.boostCharge > 0;
     s.boosting = wantsBoost;
     if (wantsBoost) {
       s.boostCharge -= dt;
@@ -307,35 +324,34 @@ export class Game {
       if (s.boostCharge >= CONFIG.boost.maxHold * 0.65) s.boostReady = true;
     }
 
-    // --- movement ---
+    // --- movement, relative to where you are looking ---
     const speed = CONFIG.diver.speed
       * (1 + s.finStacks * CONFIG.fins.speedBonus)
       * (s.boosting ? CONFIG.boost.speedMultiplier : 1);
-    const desired = new THREE.Vector2(this.stick.x, this.stick.y).multiplyScalar(speed);
-    if (drilling) desired.multiplyScalar(0.12);   // hold station against the rock
-    s.velocity.lerp(desired, Math.min(1, CONFIG.diver.accel * dt));
+    if (_desired.lengthSq() > 1) _desired.normalize();
+    _desired.multiplyScalar(speed);
+    if (drilling) _desired.multiplyScalar(0.12);          // hold station on the rock
+    s.velocity.lerp(_desired, Math.min(1, CONFIG.diver.accel * dt));
     if (!stickLen) s.velocity.multiplyScalar(Math.max(0, 1 - CONFIG.diver.drag * dt));
-    p.x = clamp(p.x + s.velocity.x * dt, -W.halfWidth, W.halfWidth);
-    p.y = clamp(p.y + s.velocity.y * dt, W.seabedY + 0.5, W.surfaceY - 0.5);
 
-    // Rocks are solid. Push the diver back out along the contact normal rather
-    // than letting them swim through the boulder they are trying to drill.
+    p.addScaledVector(s.velocity, dt);
+    p.x = clamp(p.x, -W.halfWidth, W.halfWidth);
+    p.z = clamp(p.z, -W.halfDepth, W.halfDepth);
+    p.y = clamp(p.y, W.seabedY + 0.7, W.surfaceY - 0.3);
+
+    // Rocks are solid: push the diver out along the contact normal.
     for (const r of s.level.rocks) {
-      const solid = (r.opened ? 0.5 : 0.92) + 0.4;
-      let dx = p.x - r.x, dy = p.y - r.y;
-      const d = Math.hypot(dx, dy);
+      const solid = (r.opened ? 0.5 : 0.92) + CONFIG.diver.bodyRadius;
+      _tmp.set(p.x - r.x, p.y - r.y, p.z - r.z);
+      const d = _tmp.length();
       if (d >= solid || d === 0) continue;
-      dx /= d; dy /= d;
-      p.x = r.x + dx * solid;
-      p.y = r.y + dy * solid;
-      // kill the component of velocity heading into the rock
-      const into = s.velocity.x * dx + s.velocity.y * dy;
-      if (into < 0) { s.velocity.x -= into * dx; s.velocity.y -= into * dy; }
+      _tmp.divideScalar(d);
+      p.set(r.x, r.y, r.z).addScaledVector(_tmp, solid);
+      const into = s.velocity.dot(_tmp);
+      if (into < 0) s.velocity.addScaledVector(_tmp, -into);
     }
 
-    // face travel direction, with a little roll
-    if (Math.abs(s.velocity.x) > 0.15) this.diver.scale.x = s.velocity.x > 0 ? 1 : -1;
-    this.diver.rotation.z = clamp(s.velocity.y * 0.12, -0.5, 0.5) * this.diver.scale.x;
+    aimAlong(this.diver, _fwd.x, _fwd.y, _fwd.z);
 
     // Fin kick, driven by how hard the diver is actually swimming.
     const effort = Math.min(1, s.velocity.length() / CONFIG.diver.speed);
@@ -346,38 +362,47 @@ export class Game {
       child.rotation.z = Math.PI / 2 + swing * (child.userData.finIndex ? 1 : -1);
     }
 
-    // Lamp reach grows with floodlights; it also dips as the tank empties.
-    this.lamp.distance = 11 + s.lightStacks * CONFIG.floodlight.radiusBonus;
-    this.lamp.intensity = 6 + 3 * clamp(s.oxygen / CONFIG.oxygen.max, 0.25, 1) + s.lightStacks * 1.5;
+    this.lamp.distance = 12 + s.lightStacks * CONFIG.floodlight.radiusBonus;
+    this.lamp.intensity = 7 + 3 * clamp(s.oxygen / CONFIG.oxygen.max, 0.25, 1) + s.lightStacks * 2;
+
+    // --- oxygen: break the surface and you breathe ---
+    const nearSurface = (W.surfaceY - p.y) < CONFIG.oxygen.surfaceDepth;
+    s.breathing = nearSurface && s.oxygen < CONFIG.oxygen.max;
+    if (nearSurface) {
+      if (s.breathing) {
+        const before = s.oxygen;
+        s.oxygen = Math.min(CONFIG.oxygen.max, s.oxygen + CONFIG.oxygen.surfaceRefillPerSec * dt);
+        if (before < CONFIG.oxygen.max * 0.5 && s.oxygen >= CONFIG.oxygen.max * 0.5) this.audio.surfaced();
+      }
+    } else {
+      let drain = CONFIG.oxygen.baseDrain;
+      if (drilling) drain *= CONFIG.oxygen.drillMultiplier;
+      if (s.boosting) drain *= CONFIG.oxygen.boostMultiplier;
+      const before = s.oxygen;
+      s.oxygen -= drain * dt;
+      const lowAt = CONFIG.oxygen.max * CONFIG.oxygen.redBelow;
+      if (before > lowAt && s.oxygen <= lowAt) this.audio.alarm();
+    }
 
     // Exhaust bubbles, faster when working hard.
     s.bubbleTimer -= dt;
     if (s.bubbleTimer <= 0) {
       s.bubbleTimer = drilling ? 0.09 : s.boosting ? 0.06 : 0.34 - effort * 0.16;
-      this._emitBubble(p.x + 0.55 * this.diver.scale.x, p.y + 0.1, s.boosting || drilling);
+      this._emitBubble(p.x + _fwd.x * 0.5, p.y + 0.15, p.z + _fwd.z * 0.5, s.boosting || drilling);
     }
 
-    this.minimap?.reveal(p.x, p.y, 3.0 + s.lightStacks * 1.6);
-
-    // --- oxygen ---
-    let drain = CONFIG.oxygen.baseDrain;
-    if (drilling) drain *= CONFIG.oxygen.drillMultiplier;
-    if (s.boosting) drain *= CONFIG.oxygen.boostMultiplier;
-    const before = s.oxygen;
-    s.oxygen -= drain * dt;
-    const lowAt = CONFIG.oxygen.max * CONFIG.oxygen.redBelow;
-    if (before > lowAt && s.oxygen <= lowAt) this.audio.alarm();
+    this.minimap?.reveal(p.x, p.z, 4.0 + s.lightStacks * 1.6);
 
     // --- collection ---
     const R = CONFIG.diver.collectRadius;
     for (const part of s.level.parts) {
-      if (part.taken || Math.hypot(part.x - p.x, part.y - p.y) > R) continue;
+      if (part.taken || Math.hypot(part.x - p.x, part.y - p.y, part.z - p.z) > R) continue;
       part.taken = true;
       part.mesh.visible = false;
       this._takePart(part.id);
     }
     for (const item of s.level.pickups) {
-      if (item.taken || Math.hypot(item.x - p.x, item.y - p.y) > R) continue;
+      if (item.taken || Math.hypot(item.x - p.x, item.y - p.y, item.z - p.z) > R) continue;
       item.taken = true;
       item.mesh.visible = false;
       this.audio.pickup();
@@ -394,45 +419,50 @@ export class Game {
     }
 
     // --- sharks ---
-    // Steering, not teleporting. The old version snapped position straight at the
-    // diver every frame using Math.sign(), so the instant it drew level the sign
-    // flipped and it juddered and flip-flopped its facing. Now it accelerates onto
-    // a heading, and pursuit is a latched state with its own detection ring rather
-    // than something that switched on and off at the edge of the danger radius.
     const SH = CONFIG.shark;
     let threat = false;
     for (const shark of s.level.sharks) {
-      const dx = p.x - shark.x, dy = p.y - shark.y;
-      const d = Math.hypot(dx, dy) || 0.0001;
+      const dx = p.x - shark.x, dy = p.y - shark.y, dz = p.z - shark.z;
+      const d = Math.hypot(dx, dy, dz) || 0.0001;
 
       if (d < SH.detectRadius) shark.chaseTimer = SH.loseInterestAfter;
       else shark.chaseTimer -= dt;
       const chasing = shark.chaseTimer > 0;
 
-      let wantX, wantY;
+      let wx, wy, wz;
       if (chasing) {
-        wantX = (dx / d) * SH.chaseSpeed;
-        wantY = (dy / d) * SH.chaseSpeed * 0.8;
+        wx = (dx / d) * SH.chaseSpeed;
+        wy = (dy / d) * SH.chaseSpeed * 0.8;
+        wz = (dz / d) * SH.chaseSpeed;
       } else {
-        wantX = shark.dir * SH.patrolSpeed;
-        wantY = THREE.MathUtils.clamp((shark.laneY - shark.y) * 0.8, -1.2, 1.2);
+        shark.heading += Math.sin(this.clock * 0.3 + shark.laneY) * 0.25 * dt;
+        wx = Math.cos(shark.heading) * SH.patrolSpeed;
+        wz = Math.sin(shark.heading) * SH.patrolSpeed;
+        wy = clamp((shark.laneY - shark.y) * 0.8, -1.2, 1.2);
       }
       const turn = Math.min(1, SH.turnRate * dt);
-      shark.vx += (wantX - shark.vx) * turn;
-      shark.vy += (wantY - shark.vy) * turn;
+      shark.vx += (wx - shark.vx) * turn;
+      shark.vy += (wy - shark.vy) * turn;
+      shark.vz += (wz - shark.vz) * turn;
 
       shark.x += shark.vx * dt;
       shark.y += shark.vy * dt;
-      if (shark.x <= -W.halfWidth) { shark.x = -W.halfWidth; shark.dir = 1; shark.vx = Math.abs(shark.vx); }
-      if (shark.x >= W.halfWidth) { shark.x = W.halfWidth; shark.dir = -1; shark.vx = -Math.abs(shark.vx); }
-      shark.y = clamp(shark.y, W.seabedY + 0.9, W.surfaceY - 1.6);
+      shark.z += shark.vz * dt;
+      if (shark.x <= -W.halfWidth || shark.x >= W.halfWidth) {
+        shark.x = clamp(shark.x, -W.halfWidth, W.halfWidth);
+        shark.vx *= -1; shark.heading = Math.PI - shark.heading;
+      }
+      if (shark.z <= -W.halfDepth || shark.z >= W.halfDepth) {
+        shark.z = clamp(shark.z, -W.halfDepth, W.halfDepth);
+        shark.vz *= -1; shark.heading = -shark.heading;
+      }
+      shark.y = clamp(shark.y, W.seabedY + 1.0, W.surfaceY - 1.6);
 
       if (d < SH.dangerRadius) {
         threat = true;
         shark.dwell += dt;
         if (d < SH.catchRadius) return this._end('loss', 'A shark caught you.');
       } else {
-        // Escaping a ring you actually loitered inside is the risk bonus.
         if (shark.dwell >= SH.closeCallDwell && !shark.banked) {
           shark.banked = true;
           s.closeCalls += 1;
@@ -442,23 +472,13 @@ export class Game {
         if (shark.dwell > 0) { shark.dwell = 0; shark.banked = false; }
       }
 
-      // Facing is latched through a deadzone so it cannot strobe when the shark
-      // is moving almost straight up or down.
-      if (shark.vx > SH.facingDeadzone) shark.face = 1;
-      else if (shark.vx < -SH.facingDeadzone) shark.face = -1;
-
-      shark.mesh.position.set(shark.x, shark.y, 0);
-      shark.mesh.scale.x = shark.face;
-      const pitch = Math.atan2(shark.vy, Math.max(0.4, Math.abs(shark.vx)));
-      shark.mesh.rotation.z = clamp(pitch, -0.7, 0.7) * shark.face;
-      shark.mesh.rotation.y = Math.sin(this.clock * (chasing ? 7 : 3.4) + shark.x) * 0.16;
+      shark.mesh.position.set(shark.x, shark.y, shark.z);
+      aimAlong(shark.mesh, shark.vx, shark.vy, shark.vz);
     }
     s.sharkThreat = threat;
 
-    // --- surfacing ---
-    // Latched: the diver enters the water inside the hull's radius, so surfacing
-    // only arms once they have actually swum clear of the boat.
-    const toBoat = Math.hypot(this.boat.position.x - p.x, this.boat.position.y - p.y);
+    // --- climbing aboard ---
+    const toBoat = Math.hypot(this.boat.position.x - p.x, this.boat.position.y - p.y, this.boat.position.z - p.z);
     if (!s.canSurface && toBoat > W.surfaceRadius * 1.35) s.canSurface = true;
     if (s.canSurface && toBoat < W.surfaceRadius) {
       this.audio.surfaced();
@@ -468,24 +488,21 @@ export class Game {
     }
 
     // --- sonar ---
-    // Normally a bearing on the nearest part still out there. Once the tank drops
-    // past the reserve it switches to the boat instead — the moment you need a way
-    // home is exactly the moment a part bearing stops being the useful answer.
     const remaining = [
       ...s.level.parts.filter((x) => !x.taken),
       ...s.level.rocks.filter((r) => !r.opened && r.part),
     ];
     let near = null, nearD = Infinity;
     for (const o of remaining) {
-      const d = Math.hypot(o.x - p.x, o.y - p.y);
+      const d = Math.hypot(o.x - p.x, o.y - p.y, o.z - p.z);
       if (d < nearD) { nearD = d; near = o; }
     }
     const lowAir = s.oxygen / CONFIG.oxygen.max < CONFIG.oxygen.headHomeBelow;
     if (lowAir || !near) {
-      const bx = this.boat.position.x - p.x, by = this.boat.position.y - p.y;
-      s.sonar = { dist: Math.hypot(bx, by), bearingDeg: (Math.atan2(bx, by) * 180) / Math.PI, mode: 'home' };
+      s.sonar = { dist: toBoat, mode: 'home',
+        tx: this.boat.position.x, ty: this.boat.position.y, tz: this.boat.position.z };
     } else {
-      s.sonar = { dist: nearD, bearingDeg: (Math.atan2(near.x - p.x, near.y - p.y) * 180) / Math.PI, mode: 'part' };
+      s.sonar = { dist: nearD, mode: 'part', tx: near.x, ty: near.y, tz: near.z };
     }
 
     if (s.oxygen <= 0) return this._end('loss', 'Your tank ran dry.');
@@ -499,7 +516,7 @@ export class Game {
     s.drillRock = null;
     s.drillProgress = 0;
     if (rock.part) {
-      this._spawnFlyup(rock.part, rock.x, rock.y);
+      this._spawnFlyup(rock.part, rock.x, rock.y, rock.z);
       this._takePart(rock.part);
     } else {
       s.oxygen = Math.min(CONFIG.oxygen.max, s.oxygen + CONFIG.oxygen.tankRefill);
@@ -508,13 +525,42 @@ export class Game {
     }
   }
 
+  // A part sealed in a rock has no mesh until the rock cracks. Without this the
+  // only feedback was a toast, so drilling felt like nothing happened.
+  _spawnFlyup(id, x, y, z) {
+    const m = MESHES.part(id);
+    m.position.set(x, y, z);
+    this.group.add(m);
+    this.state.flyups.push({ mesh: m, t: 0 });
+    for (let i = 0; i < 6; i++) this._emitBubble(x, y, z, true);
+  }
+
+  _updateFlyups(dt) {
+    const s = this.state;
+    if (!s.flyups.length) return;
+    const p = this.diver.position;
+    for (let i = s.flyups.length - 1; i >= 0; i--) {
+      const f = s.flyups[i];
+      f.t += dt / 0.75;
+      if (f.t >= 1) {
+        this.group.remove(f.mesh);
+        f.mesh.traverse((n) => { n.geometry?.dispose?.(); n.material?.dispose?.(); });
+        s.flyups.splice(i, 1);
+        continue;
+      }
+      const e = f.t * f.t;
+      f.mesh.position.lerp(_tmp.set(p.x, p.y + 0.4, p.z), e * 0.35);
+      f.mesh.rotation.y += dt * 5;
+      f.mesh.scale.setScalar(1 + Math.sin(f.t * Math.PI) * 0.5 - f.t * 0.55);
+    }
+  }
+
   _takePart(id) {
     const s = this.state;
     s.carrying.push(id);
     s.found.add(id);
     this.audio.partFound();
-    const part = PARTS.find((p) => p.id === id);
-    this.hooks.onToast?.(`${part.label} recovered`);
+    this.hooks.onToast?.(`${PARTS.find((p) => p.id === id).label} recovered`);
     this.hooks.onPartFound?.(id);
   }
 
@@ -528,16 +574,12 @@ export class Game {
     s.breakdown = {
       parts: s.installed.length * CONFIG.score.perPartInstalled,
       closeCalls: s.closeCalls * CONFIG.score.perCloseCall,
-      // Beating the storm pays for the clock you did not need. Losing pays nothing
-      // for it — otherwise sitting on the boat would score.
       escape: outcome === 'win' ? Math.round(Math.max(0, s.timeLeft)) * CONFIG.score.perSecondOnEscape : 0,
     };
     s.score = s.breakdown.parts + s.breakdown.closeCalls + s.breakdown.escape;
-    if (outcome === 'win') { this.audio.win(); this.outro = 0; } else { this.audio.lose(); }
+    if (outcome === 'win') { this.audio.win(); this.outro = 0; } else this.audio.lose();
     this.hooks.onEnd?.(outcome, reason, s);
   }
-
-  /* --------------------------------------------------------------- update */
 
   // Plays after a win: the boat pulls away toward shore behind the score card.
   updateOutro(dt) {
@@ -545,17 +587,18 @@ export class Game {
     this.outro += dt;
     const t = Math.min(1, this.outro / 7);
     const eased = t * t * (3 - 2 * t);
-    this.boat.position.x = W.boatX + eased * 26;
+    this.boat.position.x = W.boatX + eased * 34;
     this.boat.position.y = W.boatY + Math.sin(this.outro * 1.6) * 0.16;
     this.boat.rotation.z = Math.sin(this.outro * 1.2) * 0.05;
-    updateBoat(this.boat, this.clock + this.outro, 0);
     this.diver.visible = false;
     this.o2Bar.visible = false;
-    // Sit the boat high in frame so it stays clear of the score card below it.
-    const camX = W.boatX + eased * 20;
-    this.camera.position.set(camX, W.boatY - 5.6, 22);
-    this.camera.lookAt(camX + 2, W.boatY - 5.2, 0);
+    const cx = this.boat.position.x;
+    this.camera.position.set(cx - 9, 4.5, 13);
+    this.camera.lookAt(cx + 1, 1.2, 0);
+    updateBoat(this.boat, this.clock + this.outro, 0);
   }
+
+  /* --------------------------------------------------------------- update */
 
   update(dt) {
     const s = this.state;
@@ -579,36 +622,47 @@ export class Game {
     const p = this.diver.position;
     this.clock += dt;
 
-    // O2 bar rides above the diver
+    // --- oxygen bar + sonar chevron, billboarded to the camera ---
     const pct = clamp(s.oxygen / CONFIG.oxygen.max, 0, 1);
-    this.o2Bar.position.set(p.x - 0.15 * this.diver.scale.x, p.y + 0.82, 0.2);
+    this.o2Bar.position.set(p.x, p.y + 1.15, p.z);
+    this.o2Bar.quaternion.copy(this.camera.quaternion);
     this.o2Fill.scale.x = Math.max(0.001, pct);
     this.o2Fill.position.x = -(1.32 * (1 - pct)) / 2;
     this.o2Fill.material.color.setHex(
       pct < CONFIG.oxygen.redBelow ? PALETTE.danger : pct < CONFIG.oxygen.amberBelow ? PALETTE.signal : PALETTE.ok
     );
 
-    if (s.sonar) {
-      this.sonarTick.visible = this.mode === 'dive';
-      // bearingDeg is measured clockwise from "up", which is how the cone points.
-      this.sonarTick.rotation.z = -(s.sonar.bearingDeg * Math.PI) / 180;
-      this.sonarTick.material.opacity = 0.25 + 0.7 * (1 - clamp(s.sonar.dist / (W.halfWidth * 1.4), 0, 1));
+    if (s.sonar && this.mode === 'dive') {
+      this.sonarTick.visible = true;
+      // Project the bearing into camera space, so the chevron points at the
+      // target on screen whichever way the head is turned.
+      _tmp.set(s.sonar.tx - p.x, s.sonar.ty - p.y, s.sonar.tz - p.z)
+        .applyQuaternion(this.camera.quaternion.clone().invert());
+      this.sonarTick.rotation.z = -Math.atan2(_tmp.x, _tmp.y);
+      this.sonarTick.material.opacity = 0.3 + 0.65 * (1 - clamp(s.sonar.dist / (W.halfWidth * 1.6), 0, 1));
       this.sonarTick.material.color.setHex(s.sonar.mode === 'home' ? PALETTE.ok : PALETTE.signal);
     } else {
       this.sonarTick.visible = false;
     }
 
-    // Storm pressure: the water darkens and closes in over the last 90 seconds.
-    const late = 1 - clamp(s.timeLeft / CONFIG.run.lateGameSeconds, 0, 1);
-    const light = 1 + s.lightStacks * 0.3;
+    // --- the water closes in with depth ---
     const depthT = clamp((W.surfaceY - p.y) / Math.abs(W.seabedY), 0, 1);
-    const base = new THREE.Color(PALETTE.shallow).lerp(new THREE.Color(PALETTE.abyss), depthT * 0.68);
-    base.lerp(new THREE.Color(PALETTE.abyss), late * 0.7);
-    this.scene.background.copy(base);
-    this.scene.fog.color.copy(base);
-    this.scene.fog.near = 12 * light;
-    this.scene.fog.far = (46 - late * 22) * light;
+    s.depthT = depthT;
+    const late = 1 - clamp(s.timeLeft / CONFIG.run.lateGameSeconds, 0, 1);
+    const lightRelief = s.lightStacks * 0.12;
+    const murk = clamp(depthT + late * 0.45 - lightRelief, 0, 1);
 
+    _colShallow.setHex(PALETTE.shallow);
+    _colDeep.setHex(PALETTE.abyss);
+    _colShallow.lerp(_colDeep, Math.pow(murk, 0.85));
+    this.scene.background.copy(_colShallow);
+    this.scene.fog.color.copy(_colShallow);
+    this.scene.fog.near = lerp(DF.fogNearSurface, DF.fogNearDeep, murk);
+    this.scene.fog.far = lerp(DF.fogFarSurface, DF.fogFarDeep, murk) * (1 + s.lightStacks * 0.18);
+    this.ambient.intensity = lerp(DF.ambientSurface, DF.ambientDeep, murk);
+    this.sun.intensity = lerp(DF.sunSurface, DF.sunDeep, murk);
+
+    // --- ambient life ---
     for (const m of this.motes.children) {
       m.position.y += m.userData.drift * dt;
       m.position.x += Math.sin(this.clock * 0.6 + m.userData.sway) * 0.12 * dt;
@@ -619,52 +673,55 @@ export class Game {
       c.material.map.offset.y += c.userData.speed * 0.6 * dt;
     }
     for (const sh of this.shafts) {
-      sh.material.opacity = (0.085 + 0.06 * (0.5 + 0.5 * Math.sin(this.clock * 0.5 + sh.userData.phase))) * (1 - late * 0.75);
+      sh.userData.mat.opacity = (0.08 + 0.05 * (0.5 + 0.5 * Math.sin(this.clock * 0.5 + sh.userData.phase))) * (1 - late * 0.7);
     }
     for (const k of this.kelp) {
-      const pos = k.geometry.attributes.position;
-      const { base, height, phase, amp } = k.userData;
+      const { blades, base, height, phase, amp } = k.userData;
+      for (const blade of blades) {
+        const pos = blade.geometry.attributes.position;
+        for (let i = 0; i < pos.count; i++) {
+          const y = base[i * 3 + 1];
+          const t = y / height;                    // rooted at the bed, loose at the tip
+          pos.setX(i, base[i * 3] + Math.sin(this.clock * 0.9 + phase + t * 2.2) * amp * t * t);
+        }
+        pos.needsUpdate = true;
+      }
+    }
+    // gentle swell on the underside of the surface
+    if (this.surface && this.surfaceBase) {
+      const pos = this.surface.geometry.attributes.position;
       for (let i = 0; i < pos.count; i++) {
-        const y = base[i * 3 + 1];
-        const t = y / height;                       // rooted at the bed, loose at the tip
-        pos.setX(i, base[i * 3] + Math.sin(this.clock * 0.9 + phase + t * 2.2) * amp * t * t);
+        const bx = this.surfaceBase[i * 3], by = this.surfaceBase[i * 3 + 1];
+        pos.setZ(i, Math.sin(bx * 0.18 + this.clock * 0.8) * 0.28 + Math.sin(by * 0.15 + this.clock * 0.6) * 0.22);
       }
       pos.needsUpdate = true;
     }
     this._updateBubbles(dt);
     this._updateFlyups(dt);
 
-    // Boat: bob with the swell, and list to starboard by however much of her is
-    // still missing. Fitting a part visibly rights her — the progress bar and
-    // the hero asset say the same thing.
+    // --- boat: bob, and list by however much of her is still missing ---
     const missing = 1 - s.installed.length / PART_COUNT;
     this.boat.position.y = W.boatY + Math.sin(this.clock * 0.9) * 0.12;
     this.boat.rotation.z = Math.sin(this.clock * 0.7) * 0.03 - missing * 0.055;
     updateBoat(this.boat, this.clock, s.repairing ? 1 : 0);
 
-    // Camera: framed on the boat at the surface, following the diver underwater.
-    // It follows the diver 1:1 and is clamped to the world instead of using a
-    // parallax factor — the factor let the diver swim off screen near the walls.
-    let target;
+    // --- camera ---
+    const k = Math.min(1, dt * CONFIG.camera.followLerp);
     if (this.mode === 'dive') {
-      const z = 15;
-      const halfH = Math.tan((this.camera.fov * Math.PI) / 360) * z;
-      const halfW = halfH * this.camera.aspect;
-      target = {
-        x: clamp(p.x, -Math.max(0, W.halfWidth - halfW), Math.max(0, W.halfWidth - halfW)),
-        // +2.2 keeps the diver around two thirds up the frame, clear of the
-        // joystick and boost button in the bottom fifth.
-        y: clamp(p.y + 2.2, W.seabedY + halfH * 0.35, W.surfaceY - halfH * 0.2),
-        z,
-      };
+      _euler.set(s.pitch, s.yaw, 0, 'YXZ');
+      _fwd.set(0, 0, -1).applyEuler(_euler);
+      _camWant.copy(p).addScaledVector(_fwd, -CONFIG.camera.distance);
+      _camWant.y += CONFIG.camera.height;
+      // never punch through the bed or pop out of the water
+      _camWant.y = clamp(_camWant.y, W.seabedY + 1.0, W.surfaceY - 0.4);
+      this.camera.position.lerp(_camWant, k);
+      _look.copy(p).addScaledVector(_fwd, CONFIG.camera.lookAhead);
+      this.camera.lookAt(_look);
     } else {
-      target = { x: W.boatX, y: W.boatY - 3.4, z: 21 };
+      _camWant.set(W.boatX - 7.5, W.boatY + 3.6, W.boatZ + 11);
+      this.camera.position.lerp(_camWant, k);
+      this.camera.lookAt(W.boatX, W.boatY + 1.1, W.boatZ);
     }
-    const k = Math.min(1, dt * 3.2);
-    this.camera.position.x += (target.x - this.camera.position.x) * k;
-    this.camera.position.y += (target.y - this.camera.position.y) * k;
-    this.camera.position.z += (target.z - this.camera.position.z) * k;
-    this.camera.lookAt(target.x, target.y, 0);
   }
 
   /* ------------------------------------------------------------- readouts */

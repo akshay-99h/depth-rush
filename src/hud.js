@@ -21,6 +21,7 @@ export class Hud {
     this.repairFill = document.querySelector('#btn-repair .fill');
     this.btnRepair = $('btn-repair');
     this.boatStatus = $('boat-status');
+    this.depth = $('depth-value');
 
     this._toastTimer = null;
     this._checklistSig = '';
@@ -66,13 +67,17 @@ export class Hud {
         </div>`).join('');
     }
 
+    this.depth.textContent = game.mode === 'dive'
+      ? `${Math.round(Math.abs(game.diver.position.y))}M` : '0M';
+
     if (game.mode === 'dive') {
       this.boost.dataset.state = s.boosting ? 'active' : s.boostReady ? 'ready' : 'cooling';
       this.vignette.dataset.on = s.sharkThreat ? 'true' : 'false';
 
       let hint = '';
       if (s.drillRock) hint = `Drilling ${Math.round(s.drillProgress * 100)}%`;
-      else if (s.sonar && s.sonar.dist < 4) hint = 'A part is close';
+      else if (s.breathing) hint = 'Breathing — tank refilling';
+      else if (s.sonar && s.sonar.mode === 'part' && s.sonar.dist < 5) hint = 'A part is close';
       this.hint.textContent = hint;
       this.hint.dataset.on = hint ? 'true' : 'false';
     } else {

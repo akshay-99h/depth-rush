@@ -15,6 +15,7 @@ import {
 import { buildBoat } from './boat.js';
 
 const W = CONFIG.world;
+const D = CONFIG.depthFade;
 
 export const PALETTE = {
   abyss: 0x04141c,
@@ -58,7 +59,7 @@ export function createRenderer(canvas) {
 }
 
 export function createCamera() {
-  const cam = new THREE.PerspectiveCamera(52, 9 / 19.5, 0.1, 160);
+  const cam = new THREE.PerspectiveCamera(CONFIG.camera.fov, 9 / 19.5, 0.1, 220);
   cam.position.set(0, -6, 18);
   return cam;
 }
@@ -66,155 +67,153 @@ export function createCamera() {
 export function createScene() {
   const tex = loadTextures();
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(PALETTE.water);
-  scene.fog = new THREE.Fog(PALETTE.water, 18, 46);
+  scene.background = new THREE.Color(PALETTE.shallow);
+  scene.fog = new THREE.Fog(PALETTE.shallow, D.fogNearSurface, D.fogFarSurface);
 
-  // Sunlight from above the surface, plus a sky/seabed hemisphere so nothing
-  // ever goes fully black. Everything else in the water is lit by the diver.
-  const sun = new THREE.DirectionalLight(0xd8f6ff, 2.1);
-  sun.position.set(3, 30, 12);
+  // Lights are handed back so the sim can crush them as the diver descends —
+  // the darkening is a real falloff, not a colour filter over a bright scene.
+  const sun = new THREE.DirectionalLight(0xd8f6ff, D.sunSurface);
+  sun.position.set(6, 40, 10);
   scene.add(sun);
-  scene.add(new THREE.HemisphereLight(0x8fe3f0, 0x0a2129, 1.15));
-  const fill = new THREE.DirectionalLight(0x2f7f96, 0.5);
-  fill.position.set(-6, -4, 10);
-  scene.add(fill);
+  const ambient = new THREE.HemisphereLight(0x8fe3f0, 0x07202a, D.ambientSurface);
+  scene.add(ambient);
 
-  // Sky above the waterline — the only warm value in the frame, so the surface
-  // always reads as safety from anywhere in the water column.
-  const skyGeo = new THREE.PlaneGeometry(W.halfWidth * 5, 30);
-  const skyMat = new THREE.MeshBasicMaterial({ fog: false });
-  const skyCanvas = document.createElement('canvas');
-  skyCanvas.width = 8; skyCanvas.height = 256;
-  const sctx = skyCanvas.getContext('2d');
-  const sg = sctx.createLinearGradient(0, 0, 0, 256);
-  sg.addColorStop(0, '#7fb9c6');
-  sg.addColorStop(0.55, '#3d8497');
-  sg.addColorStop(1, '#1d5e70');
-  sctx.fillStyle = sg; sctx.fillRect(0, 0, 8, 256);
-  skyMat.map = new THREE.CanvasTexture(skyCanvas);
-  skyMat.map.colorSpace = THREE.SRGBColorSpace;
-  const sky = new THREE.Mesh(skyGeo, skyMat);
-  sky.position.set(0, W.surfaceY + 15, -10);
-  scene.add(sky);
-
-  // The waterline itself: a bright band plus a thin foam lip.
+  // The underside of the surface: a big bright ceiling you can always find by
+  // looking up, which is what makes "swim up to breathe" legible.
   const surface = new THREE.Mesh(
-    new THREE.PlaneGeometry(W.halfWidth * 5, 0.5),
-    new THREE.MeshBasicMaterial({ color: 0x9fe6ee, fog: false, transparent: true, opacity: 0.4 })
+    new THREE.PlaneGeometry(W.halfWidth * 6, W.halfDepth * 6, 24, 24),
+    new THREE.MeshBasicMaterial({ color: 0xa8ecf2, side: THREE.DoubleSide, transparent: true, opacity: 0.55, fog: true })
   );
-  surface.position.set(0, W.surfaceY - 0.05, -1.5);
+  surface.rotation.x = -Math.PI / 2;
+  surface.position.y = W.surfaceY;
   scene.add(surface);
-  const foam = new THREE.Mesh(
-    new THREE.PlaneGeometry(W.halfWidth * 5, 0.09),
-    new THREE.MeshBasicMaterial({ color: 0xeafcff, fog: false, transparent: true, opacity: 0.8 })
-  );
-  foam.position.set(0, W.surfaceY + 0.2, -1.4);
-  scene.add(foam);
+  const surfaceBase = surface.geometry.attributes.position.array.slice();
 
-  // Seabed, with a second additive plane of caustics scrolling across it.
+  // Seabed.
   const floor = new THREE.Mesh(
-    new THREE.PlaneGeometry(W.halfWidth * 5, 26, 1, 1),
+    new THREE.PlaneGeometry(W.halfWidth * 4, W.halfDepth * 4, 1, 1),
     new THREE.MeshStandardMaterial({ map: tex.sand, roughness: 0.95, metalness: 0 })
   );
-  floor.rotation.x = -Math.PI / 2.7;       // raked back so the bed reads as ground
-  floor.position.set(0, W.seabedY - 0.7, -2);
+  floor.rotation.x = -Math.PI / 2;
+  floor.position.y = W.seabedY;
   scene.add(floor);
 
+  // Caustics: two additive layers scrolling across the bed at different speeds.
   const caustics = [];
   for (let i = 0; i < 2; i++) {
     const m = new THREE.Mesh(
-      new THREE.PlaneGeometry(W.halfWidth * 5, 24),
+      new THREE.PlaneGeometry(W.halfWidth * 4, W.halfDepth * 4),
       new THREE.MeshBasicMaterial({
         map: tex.caustics.clone(), blending: THREE.AdditiveBlending,
         transparent: true, opacity: i ? 0.16 : 0.24, depthWrite: false,
       })
     );
     m.material.map.needsUpdate = true;
-    m.rotation.x = -Math.PI / 2.7;
-    m.position.set(0, W.seabedY - 0.65 + i * 0.02, -2);
+    m.rotation.x = -Math.PI / 2;
+    m.position.y = W.seabedY + 0.03 + i * 0.02;
     m.userData.speed = i ? -0.014 : 0.022;
     scene.add(m);
     caustics.push(m);
   }
 
-  // Shafts of light angling down from the surface.
+  // Shafts of light. Crossed pairs, so they read from any camera angle.
   const shafts = new THREE.Group();
-  for (let i = 0; i < 7; i++) {
-    const w = 1.4 + Math.random() * 2.6;
-    const m = new THREE.Mesh(
-      new THREE.PlaneGeometry(w, Math.abs(W.seabedY) + 6),
-      new THREE.MeshBasicMaterial({
-        map: tex.glow, color: 0xbdf0ff, blending: THREE.AdditiveBlending,
-        transparent: true, opacity: 0.10 + Math.random() * 0.07, depthWrite: false, fog: false,
-      })
+  const shaftH = Math.abs(W.seabedY) + 4;
+  for (let i = 0; i < 14; i++) {
+    const g = new THREE.Group();
+    const wdt = 1.6 + Math.random() * 3.0;
+    const mat = new THREE.MeshBasicMaterial({
+      map: tex.glow, color: 0xbdf0ff, blending: THREE.AdditiveBlending,
+      transparent: true, opacity: 0.09, depthWrite: false, fog: true,
+    });
+    for (let k = 0; k < 2; k++) {
+      const p = new THREE.Mesh(new THREE.PlaneGeometry(wdt, shaftH), mat);
+      p.rotation.y = k * Math.PI / 2;
+      g.add(p);
+    }
+    g.position.set(
+      (Math.random() - 0.5) * W.halfWidth * 2.2,
+      W.surfaceY - shaftH / 2,
+      (Math.random() - 0.5) * W.halfDepth * 2.2
     );
-    m.position.set((Math.random() - 0.5) * W.halfWidth * 2.4, W.surfaceY - (Math.abs(W.seabedY) + 6) / 2 + 2, -5 - Math.random() * 2);
-    m.rotation.z = (Math.random() - 0.5) * 0.22;
-    m.userData.phase = Math.random() * Math.PI * 2;
-    shafts.add(m);
+    g.userData = { phase: Math.random() * Math.PI * 2, mat };
+    shafts.add(g);
   }
   scene.add(shafts);
 
-  // Parallax backdrop. Distant boulders and kelp sitting behind the play plane
-  // give the water column something to read against — without them the mid-water
-  // is just fog.
-  const backdrop = new THREE.Group();
-  for (let i = 0; i < 16; i++) {
-    const z = -6.5 - Math.random() * 4;
-    const s = 1.6 + Math.random() * 3.4;
-    const b = new THREE.Mesh(
-      new THREE.IcosahedronGeometry(s, 0),
-      new THREE.MeshStandardMaterial({ color: 0x0d2a35, roughness: 1, metalness: 0 })
-    );
-    b.position.set((Math.random() - 0.5) * W.halfWidth * 2.8, W.seabedY + Math.random() * 2.5 - 0.5, z);
-    b.rotation.set(Math.random() * 3, Math.random() * 3, Math.random() * 3);
-    b.scale.z = 0.6;
-    backdrop.add(b);
-  }
-  scene.add(backdrop);
-
-  const kelp = [];
-  for (let i = 0; i < 18; i++) {
-    const h = 3.5 + Math.random() * 5.5;
-    const geo = new THREE.PlaneGeometry(0.34 + Math.random() * 0.22, h, 1, 8);
-    geo.translate(0, h / 2, 0);
-    const m = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({
-      color: 0x11463f, roughness: 0.9, metalness: 0, side: THREE.DoubleSide,
-      transparent: true, opacity: 0.9,
+  // Suspended particulate. Sprites, so they face the camera from any angle.
+  const motes = new THREE.Group();
+  for (let i = 0; i < 160; i++) {
+    const s = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: tex.glow, color: 0xcdf2f5, transparent: true,
+      opacity: 0.10 + Math.random() * 0.2, depthWrite: false,
+      blending: THREE.AdditiveBlending, fog: true,
     }));
-    m.position.set((Math.random() - 0.5) * W.halfWidth * 2.4, W.seabedY - 0.3, -4.5 - Math.random() * 3.5);
-    m.userData = {
+    s.position.set(
+      (Math.random() - 0.5) * W.halfWidth * 2.2,
+      W.seabedY + Math.random() * (Math.abs(W.seabedY) + 2),
+      (Math.random() - 0.5) * W.halfDepth * 2.2
+    );
+    const sc = 0.06 + Math.random() * 0.16;
+    s.scale.set(sc, sc, 1);
+    s.userData = { drift: 0.08 + Math.random() * 0.3, sway: Math.random() * Math.PI * 2 };
+    motes.add(s);
+  }
+  scene.add(motes);
+
+  // Kelp: crossed blades rooted on the bed, so they have volume from any angle.
+  const kelp = [];
+  for (let i = 0; i < 46; i++) {
+    const h = 3.5 + Math.random() * 7;
+    const geo = new THREE.PlaneGeometry(0.34 + Math.random() * 0.24, h, 1, 8);
+    geo.translate(0, h / 2, 0);
+    const mat = new THREE.MeshStandardMaterial({
+      color: 0x11463f, roughness: 0.9, metalness: 0,
+      side: THREE.DoubleSide, transparent: true, opacity: 0.92,
+    });
+    const g = new THREE.Group();
+    const blades = [];
+    for (let k = 0; k < 2; k++) {
+      const m = new THREE.Mesh(geo.clone(), mat);
+      m.rotation.y = k * Math.PI / 2;
+      g.add(m);
+      blades.push(m);
+    }
+    g.position.set(
+      (Math.random() - 0.5) * W.halfWidth * 2,
+      W.seabedY - 0.2,
+      (Math.random() - 0.5) * W.halfDepth * 2
+    );
+    g.userData = {
+      blades,
       base: geo.attributes.position.array.slice(),
       height: h,
       phase: Math.random() * Math.PI * 2,
       amp: 0.35 + Math.random() * 0.5,
     };
-    scene.add(m);
-    kelp.push(m);
+    scene.add(g);
+    kelp.push(g);
   }
 
-  // Suspended particulate, drifting up.
-  const motes = new THREE.Group();
-  const moteGeo = new THREE.PlaneGeometry(0.13, 0.13);
-  for (let i = 0; i < 90; i++) {
-    const m = new THREE.Mesh(moteGeo, new THREE.MeshBasicMaterial({
-      map: tex.glow, color: 0xcdf2f5, transparent: true,
-      opacity: 0.12 + Math.random() * 0.22, depthWrite: false,
-      blending: THREE.AdditiveBlending,
-    }));
-    m.position.set(
-      (Math.random() - 0.5) * W.halfWidth * 3,
-      W.seabedY + Math.random() * (Math.abs(W.seabedY) + 4),
-      -2 - Math.random() * 5
+  // Scenery boulders scattered over the bed for parallax and landmarks.
+  const backdrop = new THREE.Group();
+  for (let i = 0; i < 30; i++) {
+    const s = 1.4 + Math.random() * 3.2;
+    const b = new THREE.Mesh(
+      new THREE.IcosahedronGeometry(s, 0),
+      new THREE.MeshStandardMaterial({ color: 0x0d2a35, roughness: 1, metalness: 0 })
     );
-    m.scale.setScalar(0.5 + Math.random() * 1.6);
-    m.userData.drift = 0.08 + Math.random() * 0.3;
-    m.userData.sway = Math.random() * Math.PI * 2;
-    motes.add(m);
+    b.position.set(
+      (Math.random() - 0.5) * W.halfWidth * 2.3,
+      W.seabedY + s * 0.35 - 0.6,
+      (Math.random() - 0.5) * W.halfDepth * 2.3
+    );
+    b.rotation.set(Math.random() * 3, Math.random() * 3, Math.random() * 3);
+    backdrop.add(b);
   }
-  scene.add(motes);
+  scene.add(backdrop);
 
-  return { scene, motes, caustics, shafts, kelp, backdrop, floor, sky, surface };
+  return { scene, motes, caustics, shafts, kelp, backdrop, floor, surface, surfaceBase, sun, ambient };
 }
 
 /* ----------------------------------------------------------------- meshes */
@@ -430,12 +429,13 @@ function partMesh(id) {
       }
     }
   }
-  // A soft glow so a dropped part is still findable in a dark pocket.
-  const halo = new THREE.Mesh(
-    new THREE.PlaneGeometry(1.3, 1.3),
-    new THREE.MeshBasicMaterial({ map: loadTextures().glow, color: 0xffa825, blending: THREE.AdditiveBlending, transparent: true, opacity: 0.28, depthWrite: false })
-  );
-  halo.position.z = -0.3;
+  // A soft glow so a dropped part is still findable in a dark pocket. A sprite,
+  // so it faces the camera from any angle now that the world is 3D.
+  const halo = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: loadTextures().glow, color: 0xffa825, blending: THREE.AdditiveBlending,
+    transparent: true, opacity: 0.34, depthWrite: false,
+  }));
+  halo.scale.set(2.0, 2.0, 1);
   g.add(halo);
   return g;
 }
@@ -495,11 +495,11 @@ function floodlightMesh() {
   lens.rotation.y = Math.PI / 2;
   lens.position.x = 0.16;
   g.add(lens);
-  const glow = new THREE.Mesh(
-    new THREE.PlaneGeometry(0.95, 0.95),
-    new THREE.MeshBasicMaterial({ map: loadTextures().glow, color: 0xffe89a, blending: THREE.AdditiveBlending, transparent: true, opacity: 0.4, depthWrite: false })
-  );
-  glow.position.set(0.2, 0, 0);
+  const glow = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: loadTextures().glow, color: 0xffe89a, blending: THREE.AdditiveBlending,
+    transparent: true, opacity: 0.45, depthWrite: false,
+  }));
+  glow.scale.set(1.6, 1.6, 1);
   g.add(glow);
   return g;
 }
@@ -528,15 +528,17 @@ export function makeDiverLamp() {
 // Every run reshuffles the seabed. Three of the five parts are sealed inside
 // rocks so the player has to spend air drilling, not just swimming.
 export function generateLevel(rng) {
-  const spread = W.halfWidth - 1.6;
-  const spot = () => ({
-    x: rng.range(-spread, spread),
-    y: rng.range(W.seabedY + 0.8, W.seabedY + 13),
+  const sx = W.halfWidth - 2.0, sz = W.halfDepth - 2.0;
+  const spot = (minUp, maxUp) => ({
+    x: rng.range(-sx, sx),
+    y: rng.range(W.seabedY + minUp, W.seabedY + maxUp),
+    z: rng.range(-sz, sz),
   });
-  // Keep the water directly under the boat clear so the first dive is never a wall.
-  const clearSpot = () => {
-    let p = spot(), guard = 0;
-    while (Math.abs(p.x - W.boatX) < 2.2 && guard++ < 24) p = spot();
+  // Keep the water column directly under the boat clear so the first descent
+  // is never a wall.
+  const clearOfBoat = (minUp, maxUp) => {
+    let p = spot(minUp, maxUp), guard = 0;
+    while (guard++ < 30 && Math.hypot(p.x - W.boatX, p.z - W.boatZ) < 4.0) p = spot(minUp, maxUp);
     return p;
   };
 
@@ -550,15 +552,16 @@ export function generateLevel(rng) {
 
   const rocks = [];
   for (let i = 0; i < CONFIG.spawn.rocks; i++) {
-    const p = clearSpot();
-    p.y = rng.range(W.seabedY + 0.5, W.seabedY + 2.4);   // resting on the seabed
+    const p = clearOfBoat(0.5, 2.4);       // boulders rest on the bed
     rocks.push({ ...p, opened: false, part: sealed[i] ?? null, yieldsTank: !sealed[i], shape: i });
   }
 
-  // Rocks are solid, so anything spawned inside one would be unreachable.
+  // Rocks are solid, so nothing may spawn inside one.
   const clearOfRocks = () => {
-    let p = clearSpot(), guard = 0;
-    while (guard++ < 40 && rocks.some((r) => Math.hypot(r.x - p.x, r.y - p.y) < 2.1)) p = clearSpot();
+    let p = clearOfBoat(0.9, Math.abs(W.seabedY) * 0.55), guard = 0;
+    while (guard++ < 40 && rocks.some((r) => Math.hypot(r.x - p.x, r.y - p.y, r.z - p.z) < 2.6)) {
+      p = clearOfBoat(0.9, Math.abs(W.seabedY) * 0.55);
+    }
     return p;
   };
 
@@ -570,20 +573,20 @@ export function generateLevel(rng) {
   add('fins', CONFIG.spawn.fins);
   add('light', CONFIG.spawn.floodlights);
 
-  // One shark per depth band, so they are spread through the column rather than
-  // all stacked near the bed.
+  // One shark per depth band, spread across the volume.
   const sharks = [];
-  const band = (W.surfaceY - 4 - (W.seabedY + 3)) / CONFIG.shark.count;
+  const top = W.surfaceY - 4, bot = W.seabedY + 3;
+  const band = (top - bot) / CONFIG.shark.count;
   for (let i = 0; i < CONFIG.shark.count; i++) {
-    const laneY = rng.range(W.seabedY + 3 + band * i, W.seabedY + 3 + band * (i + 1));
+    const laneY = rng.range(bot + band * i, bot + band * (i + 1));
+    const heading = rng.range(0, Math.PI * 2);
     sharks.push({
-      x: rng.range(-spread, spread),
-      y: laneY,
+      x: rng.range(-sx, sx), y: laneY, z: rng.range(-sz, sz),
       laneY,
-      vx: rng.pick([-1, 1]) * CONFIG.shark.patrolSpeed,
+      vx: Math.cos(heading) * CONFIG.shark.patrolSpeed,
       vy: 0,
-      dir: rng.pick([-1, 1]),
-      face: 1,
+      vz: Math.sin(heading) * CONFIG.shark.patrolSpeed,
+      heading,
       chaseTimer: 0,
       dwell: 0,
       banked: false,
