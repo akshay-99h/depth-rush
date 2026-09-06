@@ -94,6 +94,12 @@ function disposeDeep(obj) {
 
 export function buildEnvironment(scene) {
   const tex = loadTextures();
+  const P = CONFIG.play;
+  // In 2.7D the camera looks along +Z at a fixed plane, so anything in front of
+  // that plane ends up between the lens and the diver. Scenery is pushed behind.
+  const sceneryZ = (spread) => (P.planar
+    ? P.planeZ - 3.5 - Math.random() * Math.max(6, spread * 0.5)
+    : (Math.random() - 0.5) * spread);
   for (let i = scene.children.length - 1; i >= 0; i--) {
     const c = scene.children[i];
     if (c.userData?.env) { disposeDeep(c); scene.remove(c); }
@@ -190,7 +196,7 @@ export function buildEnvironment(scene) {
       g.add(m);
       blades.push(m);
     }
-    g.position.set((Math.random() - 0.5) * spanX, W.seabedY - 0.2, (Math.random() - 0.5) * spanZ);
+    g.position.set((Math.random() - 0.5) * spanX, W.seabedY - 0.2, sceneryZ(spanZ));
     g.userData.env = true;
     g.userData.blades = blades;
     g.userData.base = geo.attributes.position.array.slice();
@@ -209,7 +215,7 @@ export function buildEnvironment(scene) {
       new THREE.IcosahedronGeometry(s, 0),
       new THREE.MeshStandardMaterial({ color: 0x0d2a35, roughness: 1, metalness: 0 })
     );
-    b.position.set((Math.random() - 0.5) * spanX * 1.15, W.seabedY + s * 0.35 - 0.6, (Math.random() - 0.5) * spanZ * 1.15);
+    b.position.set((Math.random() - 0.5) * spanX * 1.15, W.seabedY + s * 0.35 - 0.6, sceneryZ(spanZ * 1.15));
     b.rotation.set(Math.random() * 3, Math.random() * 3, Math.random() * 3);
     backdrop.add(b);
     // Scenery is what the trailing camera actually clips through, so it is
@@ -536,11 +542,14 @@ export function makeDiverLamp() {
 // Every run reshuffles the seabed. Three of the five parts are sealed inside
 // rocks so the player has to spend air drilling, not just swimming.
 export function generateLevel(rng, scenery = []) {
+  const P = CONFIG.play;
   const sx = W.halfWidth - 2.0, sz = W.halfDepth - 2.0;
+  // In 2.7D everything the player has to reach sits in a shallow band around the
+  // play plane; the rest of the volume is there to be looked at and swum through.
   const spot = (minUp, maxUp) => ({
     x: rng.range(-sx, sx),
     y: rng.range(W.seabedY + minUp, W.seabedY + maxUp),
-    z: rng.range(-sz, sz),
+    z: P.planar ? P.planeZ + rng.range(-P.bandZ, 0.4) : rng.range(-sz, sz),
   });
   const inScenery = (p, pad) => scenery.some((c) => Math.hypot(c.x - p.x, c.y - p.y, c.z - p.z) < c.r + pad);
   const clearOfBoat = (minUp, maxUp, pad = 1.6) => {
@@ -605,7 +614,8 @@ export function generateLevel(rng, scenery = []) {
     const heading = rng.range(0, Math.PI * 2);
     enemies.push({
       type, spec,
-      x: rng.range(-sx, sx), y: laneY, z: rng.range(-sz, sz),
+      x: rng.range(-sx, sx), y: laneY,
+      z: P.planar ? P.planeZ + rng.range(-P.enemyBandZ, P.enemyBandZ) : rng.range(-sz, sz),
       laneY,
       vx: Math.cos(heading) * spec.patrolSpeed,
       vy: 0,
@@ -621,15 +631,25 @@ export function generateLevel(rng, scenery = []) {
 
   const anchors = [];
   const crates = [];
+  // Anchors and crates have to clear the boulders as well as the scenery, and
+  // each other. Without the rock check one could land inside a boulder, where
+  // the diver's own collision keeps them permanently out of reach — a
+  // seed-dependent unwinnable run.
+  const clearTarget = (minUp, maxUp, placed) => {
+    let p = clearOfBoat(minUp, maxUp, 2.4), guard = 0;
+    const bad = (q) => rocks.some((r) => Math.hypot(r.x - q.x, r.y - q.y, r.z - q.z) < 3.0)
+      || placed.some((o) => Math.hypot(o.x - q.x, o.y - q.y, o.z - q.z) < 3.5);
+    while (guard++ < 60 && bad(p)) p = clearOfBoat(minUp, maxUp, 2.4);
+    return p;
+  };
+
   if (CONFIG.objectiveKind === 'beacon') {
     for (let i = 0; i < wanted; i++) {
-      const p = clearOfBoat(0.4, 0.9, 2.4);      // anchors sit on the bed
-      anchors.push({ ...p, planted: false });
+      anchors.push({ ...clearTarget(0.4, 0.9, anchors), planted: false });
     }
   } else if (CONFIG.objectiveKind === 'haul') {
     for (let i = 0; i < wanted; i++) {
-      const p = clearOfBoat(0.7, 1.4, 2.4);
-      crates.push({ ...p, taken: false, delivered: false });
+      crates.push({ ...clearTarget(0.7, 1.4, crates), taken: false, delivered: false });
     }
   }
 

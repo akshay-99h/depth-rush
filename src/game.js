@@ -18,6 +18,7 @@ import { animateEnemy } from './enemies.js';
 
 const W = CONFIG.world;
 const DF = CONFIG.depthFade;
+const PLAY = CONFIG.play;
 const clamp = THREE.MathUtils.clamp;
 const lerp = THREE.MathUtils.lerp;
 
@@ -33,6 +34,13 @@ const _euler = new THREE.Euler(0, 0, 0, 'YXZ');
 const _yawEuler = new THREE.Euler(0, 0, 0, 'YXZ');
 const _colShallow = new THREE.Color();
 const _colDeep = new THREE.Color();
+
+// Gameplay proximity. On the plane the diver cannot steer in Z, so Z must not
+// count against reaching something — otherwise an item a couple of metres off
+// the plane is simply unreachable. Collision stays honestly 3D.
+function reach(ax, ay, az, bx, by, bz) {
+  return PLAY.planar ? Math.hypot(ax - bx, ay - by) : Math.hypot(ax - bx, ay - by, az - bz);
+}
 
 // Aim a model whose length runs along +X down a direction vector.
 function aimAlong(obj, x, y, z) {
@@ -377,15 +385,22 @@ export class Game {
     this.o2Bar.visible = true;
     this.lamp.visible = true;
 
-    // --- look: the eye stick turns the head ---
-    s.yaw -= this.look.x * CONFIG.look.yawSpeed * dt;
-    s.pitch = clamp(s.pitch + this.look.y * CONFIG.look.pitchSpeed * dt,
-                    -CONFIG.look.pitchClamp, CONFIG.look.pitchClamp);
+    if (PLAY.planar) {
+      // 2.7D: the stick maps straight onto the plane. Up is up. There is nothing
+      // to aim, so there is no second stick.
+      _fwd.set(0, 1, 0);
+      _right.set(1, 0, 0);
+    } else {
+      // --- look: the eye stick turns the head ---
+      s.yaw -= this.look.x * CONFIG.look.yawSpeed * dt;
+      s.pitch = clamp(s.pitch + this.look.y * CONFIG.look.pitchSpeed * dt,
+                      -CONFIG.look.pitchClamp, CONFIG.look.pitchClamp);
 
-    _euler.set(s.pitch, s.yaw, 0, 'YXZ');
-    _fwd.set(0, 0, -1).applyEuler(_euler);
-    _yawEuler.set(0, s.yaw, 0, 'YXZ');
-    _right.set(1, 0, 0).applyEuler(_yawEuler);
+      _euler.set(s.pitch, s.yaw, 0, 'YXZ');
+      _fwd.set(0, 0, -1).applyEuler(_euler);
+      _yawEuler.set(0, s.yaw, 0, 'YXZ');
+      _right.set(1, 0, 0).applyEuler(_yawEuler);
+    }
 
     // --- hold-to-act: push into a boulder to drill it, or into an anchor to
     // plant a beacon. One gesture, one progress readout, two meanings.
@@ -397,10 +412,10 @@ export class Game {
       .addScaledVector(_fwd, src.y)
       .addScaledVector(_right, src.x);
     const pushing = stickLen > 0.3 && _desired.lengthSq() > 0.001;
-    const aimedAt = (o, reach) => {
-      const d = Math.hypot(o.x - p.x, o.y - p.y, o.z - p.z);
-      if (d > reach || d < 0.0001) return false;
-      _tmp.set(o.x - p.x, o.y - p.y, o.z - p.z).divideScalar(d);
+    const aimedAt = (o, within) => {
+      const d = reach(o.x, o.y, o.z, p.x, p.y, p.z);
+      if (d > within || d < 0.0001) return false;
+      _tmp.set(o.x - p.x, o.y - p.y, PLAY.planar ? 0 : o.z - p.z).normalize();
       return _tmp.dot(_look.copy(_desired).normalize()) > CONFIG.drill.aimDot;
     };
 
@@ -409,7 +424,7 @@ export class Game {
       let best = null, bd = Infinity;
       for (const a of s.level.anchors) {
         if (a.planted) continue;
-        const d = Math.hypot(a.x - p.x, a.y - p.y, a.z - p.z);
+        const d = reach(a.x, a.y, a.z, p.x, p.y, p.z);
         if (d < bd) { bd = d; best = a; }
       }
       if (best && aimedAt(best, CONFIG.drill.contactRadius + 1.0)) { target = best; kind = 'anchor'; }
@@ -418,7 +433,7 @@ export class Game {
       let best = null, bd = Infinity;
       for (const r of s.level.rocks) {
         if (r.opened) continue;
-        const d = Math.hypot(r.x - p.x, r.y - p.y, r.z - p.z);
+        const d = reach(r.x, r.y, r.z, p.x, p.y, p.z);
         if (d < bd) { bd = d; best = r; }
       }
       if (best && aimedAt(best, CONFIG.drill.contactRadius)) { target = best; kind = 'rock'; }
@@ -472,6 +487,12 @@ export class Game {
     if (!stickLen) s.velocity.multiplyScalar(Math.max(0, 1 - CONFIG.diver.drag * dt));
 
     p.addScaledVector(s.velocity, dt);
+    if (PLAY.planar) {
+      // Eased back onto the plane rather than pinned to it, so being shoved
+      // around a boulder reads as depth instead of a hard stop.
+      p.z += (PLAY.planeZ - p.z) * Math.min(1, PLAY.planeSpring * dt);
+      s.velocity.z *= Math.max(0, 1 - 4 * dt);
+    }
     p.x = clamp(p.x, -W.halfWidth, W.halfWidth);
     p.z = clamp(p.z, -W.halfDepth, W.halfDepth);
     p.y = clamp(p.y, W.seabedY + 0.7, W.surfaceY - 0.3);
@@ -491,7 +512,15 @@ export class Game {
     for (const r of s.level.rocks) pushOut(r.x, r.y, r.z, (r.opened ? 0.5 : 0.92) + CONFIG.diver.bodyRadius);
     for (const c of this.colliders) pushOut(c.x, c.y, c.z, c.r + CONFIG.diver.bodyRadius);
 
-    aimAlong(this.diver, _fwd.x, _fwd.y, _fwd.z);
+    if (PLAY.planar) {
+      const v = s.velocity;
+      if (v.lengthSq() > 0.04) {
+        aimAlong(this.diver, v.x, v.y, 0);
+        s.yaw = v.x >= 0 ? -Math.PI / 2 : Math.PI / 2;
+      }
+    } else {
+      aimAlong(this.diver, _fwd.x, _fwd.y, _fwd.z);
+    }
 
     // Fin kick, driven by how hard the diver is actually swimming.
     const effort = Math.min(1, s.velocity.length() / CONFIG.diver.speed);
@@ -538,14 +567,14 @@ export class Game {
     // --- collection ---
     const R = CONFIG.diver.collectRadius;
     for (const part of s.level.parts) {
-      if (part.taken || Math.hypot(part.x - p.x, part.y - p.y, part.z - p.z) > R) continue;
+      if (part.taken || reach(part.x, part.y, part.z, p.x, p.y, p.z) > R) continue;
       part.taken = true;
       part.mesh.visible = false;
       this._takePart(part.id);
     }
     if (this.objective === 'haul' && !s.carrying.length) {
       for (const c of s.level.crates) {
-        if (c.taken || Math.hypot(c.x - p.x, c.y - p.y, c.z - p.z) > R + 0.8) continue;
+        if (c.taken || reach(c.x, c.y, c.z, p.x, p.y, p.z) > R + 0.8) continue;
         c.taken = true;
         s.carrying.push('crate');
         s.haulCrate = c;
@@ -560,7 +589,7 @@ export class Game {
       }
     }
     for (const item of s.level.pickups) {
-      if (item.taken || Math.hypot(item.x - p.x, item.y - p.y, item.z - p.z) > R) continue;
+      if (item.taken || reach(item.x, item.y, item.z, p.x, p.y, p.z) > R) continue;
       item.taken = true;
       item.mesh.visible = false;
       this.audio.pickup();
@@ -974,13 +1003,27 @@ export class Game {
 
     // --- camera ---
     const k = Math.min(1, dt * CONFIG.camera.followLerp);
-    if (this.mode === 'dive') {
+    if (this.mode === 'dive' && PLAY.planar) {
+      // 2.7D: a fixed, slightly raked shot that tracks the diver across the
+      // plane. No collision test here, deliberately — scenery is all built
+      // behind the play plane so the line to the diver is clear by
+      // construction, and the only things left to hit are the objective
+      // boulders, which sit ON the plane by necessity. Testing against those
+      // collapsed the camera onto the diver whenever you stood beside one.
+      // Diver collision already stops you tucking directly behind a boulder,
+      // so grazing is all that can happen, and grazing reads as depth.
+      _camWant.set(p.x, p.y + CONFIG.camera.planarHeight, PLAY.planeZ + CONFIG.camera.planarDistance);
+      _camWant.x = clamp(_camWant.x, -W.halfWidth + 3, W.halfWidth - 3);
+      _camWant.y = clamp(_camWant.y, W.seabedY + 4.0, W.surfaceY + 3.5);
+      this.camera.position.lerp(_camWant, k);
+      _look.set(p.x, p.y - 0.6, PLAY.planeZ);
+      this.camera.lookAt(_look);
+    } else if (this.mode === 'dive') {
       _euler.set(s.pitch, s.yaw, 0, 'YXZ');
       _fwd.set(0, 0, -1).applyEuler(_euler);
       // Pull the camera in when something would sit between it and the diver,
       // and ease back out once the way is clear so it does not snap. The test
-      // runs along the true diver->camera segment, height lift included — testing
-      // the flat -forward ray left the camera off the line it had checked.
+      // runs along the true diver->camera segment, height lift included.
       _back.copy(p).addScaledVector(_fwd, -CONFIG.camera.distance);
       _back.y += CONFIG.camera.height;
       _back.sub(p);
@@ -988,14 +1031,10 @@ export class Game {
       _back.divideScalar(full);
       const reach = this._cameraReach(p, _back, full);
       const wanted = clamp(reach - 0.35, CONFIG.camera.minDistance, full);
-      // snap in immediately when blocked, ease back out when freed
       s.camDist = wanted < s.camDist ? wanted : lerp(s.camDist, wanted, Math.min(1, dt * 2.5));
       _camWant.copy(p).addScaledVector(_back, s.camDist);
-      // never punch through the bed or pop out of the water
       _camWant.y = clamp(_camWant.y, W.seabedY + 1.0, W.surfaceY - 0.4);
       this.camera.position.lerp(_camWant, k);
-      // The lerp lags the target, so a fast turn can still drag it through a
-      // boulder for a frame. Shove it back out afterwards.
       this._evictCamera();
       _look.copy(p).addScaledVector(_fwd, CONFIG.camera.lookAhead);
       this.camera.lookAt(_look);

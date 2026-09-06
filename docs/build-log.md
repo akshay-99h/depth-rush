@@ -462,7 +462,51 @@ with the tank run down to 8% → no bonus, score 3,130; a loss with a passing re
 
 ---
 
-## Session 10 — TBD
+## Session 10 — 2026-09-07 · 2.7D for mobile
+
+**The diagnosis before the change.** Measured 7 touch targets on the boat screen and 5 in dive,
+but the count was not the real problem. **Depth was indirect**: surfacing for air — the most
+frequent thing a player does — meant pitching up with the *eye* stick and then pushing forward
+with the *move* stick. Two thumbs coordinated for one intention. The eye stick barely served
+looking; it existed to aim movement.
+
+**2.7D fixes it at the root.** Movement is locked to a vertical plane (X across, Y down) while
+the world stays fully 3D around it. The stick now maps straight onto the plane: **push up, go up.**
+With nothing left to aim, the eye stick comes off the screen entirely. Dive is two controls —
+stick and boost.
+
+`CONFIG.play.planar` gates the whole thing, so free 3D is one flag away if it is ever wanted back.
+
+**Three real bugs this exposed, all from the same root:** the player can no longer steer in Z, so
+anything that assumed they could is now a trap.
+- *Unreachable items.* Objective furniture spawned up to 2.6m off-plane while collect range was
+  1.4m. Gameplay proximity now ignores Z — the axis the player cannot control — through a single
+  `reach()` helper. Collision stays honestly 3D. Spawn band tightened to 1.8m and biased behind
+  the plane.
+- *Camera buried in scenery.* Kelp and boulders spawned on both sides of the plane, so half of
+  them sat between the lens and the diver. Scenery is now built exclusively behind the plane.
+- *Camera collapsing onto the diver.* Having fixed the scenery, the collision test was then
+  firing on the objective boulders, which sit ON the plane by necessity — pulling the camera to
+  0.2m every time the player stood next to one. Removed in planar mode: the scenery rule
+  guarantees a clear line by construction, and diver collision already prevents tucking directly
+  behind a boulder, so grazing is all that can happen and grazing reads as depth.
+
+**And one that was already lurking.** Anchors and crates were never checked against the boulders
+at spawn, so one could land inside a rock where the diver's own collision keeps it permanently out
+of reach. It only surfaced because `shelf-2` drew a bad seed during the regression — three passes
+per level now, so a seed-dependent failure cannot hide.
+
+**Boat screen.** Scouting is opt-in behind a `SCOUT` toggle; the default is Dive / Repair plus
+drag-to-look, 7 controls down to 4.
+
+**Verification.** Stick is direct: 3.7m up on stick-up, 3.87m across on stick-right, Z held on the
+plane. Dive movement controls: 2. No scenery in front of the plane on any of three sampled levels;
+worst objective item 0.4m. **9/9 levels × 3 passes = 27/27 completions**, driven by an autopilot
+using the stick only — no teleporting.
+
+---
+
+## Session 11 — TBD
 
 <!-- Template:
 **Goal.**

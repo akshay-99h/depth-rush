@@ -22,18 +22,17 @@ lowest tank reading, number of dives taken, animal contacts, percentage of the s
 end-of-run debrief reports what you achieved against the target and whether you met it. It is a
 secondary goal worth a score bonus, never a gate, so it teaches without blocking.
 
-**Controls.** Left stick swims relative to where you are looking; a right-hand eye stick turns your
-head. Swimming follows your pitch, so looking down and pushing forward takes you down — there is no
-separate ascend control. Boost sits between them. For players who find two sticks too much, tilt-to-swim
-drives movement from the phone's own orientation and re-centres on every dive.
+**Controls.** Two, because it is a phone. The diver moves on a vertical plane — the stick maps
+straight onto it, so push up and you go up — while the world stays fully 3D around you and animals
+swim through it in depth. Nothing needs aiming, so there is no camera to manage. Boost is the only
+other button. Tilt-to-swim can replace the stick outright for players who prefer it.
 
-**What's in the prototype.** Nine dives across three biomes, all unlocked, spanning 26m to 40m across
-and 20m to 60m deep. Three enemy types with genuinely different threat models: sharks hunt and kill
-and only boost breaks a pursuit; squid ambush and tear air out of the tank rather than killing;
-jellies never hunt at all but sting and stall anything that drifts into them. Depth darkens the water
-for real — fog, ambient and sun all fall off, and your lamp is what pushes back. A top-down sonar plot
-with fog of war and a depth gutter. From the deck you can orbit the view and pan the camera out over
-the site to plan a route before going in.
+**What's in the prototype.** Nine dives across three biomes, all unlocked, spanning 26m to 40m
+across and 20m to 60m deep. Three enemy types with genuinely different threat models: sharks hunt
+and kill, and only boost breaks a pursuit; squid ambush and tear air out of the tank rather than
+killing; jellies never hunt but sting and stall anything that drifts into them. Depth darkens the
+water for real — fog, ambient and sun all fall off, and your lamp pushes back. A top-down sonar plot
+with fog of war. From the deck you can orbit and pan the camera over the site to plan a route.
 
 **Future vision.** Permanent upgrades to tank, fins and lamp; daily seeded dives with leaderboards
 and ghost replays; storm escalation that scrambles the sonar; colourblind-safe HUD states;

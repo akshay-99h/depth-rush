@@ -36,7 +36,6 @@ const game = new Game({
     onToast: (t) => hud.toastMessage(t),
     onMode: (mode) => {
       if (screen === 'boat' || screen === 'dive') showScreen(mode);
-      if (mode === 'boat') flashScoutHint();
     },
     onEnd: (outcome, reason, state) => showEnd(outcome, reason, state),
   },
@@ -212,6 +211,13 @@ function beginRun() {
 
 bindHold($('btn-boost'), (on) => { game.boostHeld = on; });
 $('btn-recentre').addEventListener('click', () => game.recentre());
+$('btn-scout').addEventListener('click', () => {
+  const el = $('screen-boat');
+  const on = el.dataset.scout !== 'on';
+  el.dataset.scout = on ? 'on' : 'off';
+  if (on) flashScoutHint();
+  else { panStick.reset(); game.recentre(); }
+});
 bindKeyboard(moveStick, lookStick, (on) => { game.boostHeld = on; });
 
 $('btn-dive').addEventListener('click', () => {
@@ -267,6 +273,10 @@ bindToggle('tg-sfx', (on) => audio.setSfx(on));
 // directly rather than through bindToggle.
 const tiltToggle = $('tg-tilt');
 const tiltNote = $('tilt-note');
+// The eye stick only exists to aim movement in free 3D. On the plane the move
+// stick already points where you are going, so it comes off the screen.
+if (CONFIG.play.planar) $('look-stick').style.display = 'none';
+
 function paintTilt() {
   const on = tilt.enabled && !tilt.denied;
   tiltToggle.dataset.on = String(on);

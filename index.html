@@ -140,7 +140,7 @@
     border-radius: 18px; pointer-events: none;
   }
   #boat-status {
-    position: absolute; left: 16px; right: 16px; bottom: calc(var(--safe-b) + 196px);
+    position: absolute; left: 16px; right: 16px; bottom: calc(var(--safe-b) + 146px);
     text-align: center; font-size: 12px; color: var(--muted); min-height: 16px;
   }
   #boat-status b { color: var(--signal); font-weight: 600; }
@@ -165,7 +165,23 @@
   #boat-look { position: absolute; inset: 0; pointer-events: auto; touch-action: none; }
   .stick-base.small { width: 88px; height: 88px; bottom: calc(var(--safe-b) + 92px); }
   .stick-base.small .stick-knob { width: 38px; height: 38px; }
+  /* Scouting is opt-in: the boat screen defaults to Dive / Repair, and the pan
+     stick only appears when asked for. */
   #pan-stick { left: 16px; }
+  #screen-boat:not([data-scout="on"]) #pan-stick,
+  #screen-boat:not([data-scout="on"]) #btn-recentre { display: none; }
+  #btn-scout {
+    position: absolute; left: 16px; bottom: calc(var(--safe-b) + 92px);
+    height: 40px; padding: 0 14px; border-radius: 12px; pointer-events: auto;
+    background: var(--chip); border: 1px solid var(--stroke); color: var(--muted);
+    font-size: 10px; font-weight: 650; letter-spacing: 0.12em; text-transform: uppercase;
+  }
+  #screen-boat[data-scout="on"] #btn-scout {
+    background: rgba(53,214,196,0.18); border-color: rgba(53,214,196,0.5); color: var(--ok);
+    bottom: calc(var(--safe-b) + 190px);
+  }
+  #screen-boat[data-scout="on"] #boat-status { bottom: calc(var(--safe-b) + 244px); }
+  #screen-boat[data-scout="on"] #scout-hint { bottom: calc(var(--safe-b) + 278px); }
   #btn-recentre {
     position: absolute; left: 116px; bottom: calc(var(--safe-b) + 112px);
     width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center;
@@ -175,7 +191,7 @@
      discoverable enough that a permanent label is just clutter. */
   #scout-hint {
     position: absolute; left: 50%; transform: translateX(-50%);
-    bottom: calc(var(--safe-b) + 228px); white-space: nowrap;
+    bottom: calc(var(--safe-b) + 180px); white-space: nowrap;
     padding: 5px 12px; border-radius: 999px;
     background: rgba(4,20,28,0.72); border: 1px solid var(--stroke);
     font-size: 10px; letter-spacing: 0.06em; color: var(--foam);
@@ -444,10 +460,11 @@
 </section>
 
 <!-- ============ BOAT ============ -->
-<section class="screen" id="screen-boat">
+<section class="screen" id="screen-boat" data-scout="off">
   <div id="boat-look"></div>
   <div class="stage-frame"></div>
   <div id="boat-status"></div>
+  <button id="btn-scout">Scout</button>
   <div class="stick-base small" id="pan-stick">
     <svg class="glyph" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
       <path d="M12 3v18M3 12h18M12 3l-2.4 2.6M12 3l2.4 2.6M12 21l-2.4-2.6M12 21l2.4-2.6M3 12l2.6-2.4M3 12l2.6 2.4M21 12l-2.6-2.4M21 12l-2.6 2.4"/>

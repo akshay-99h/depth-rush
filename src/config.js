@@ -19,6 +19,18 @@ export const CONFIG = {
     surfaceRadius: 4.0,       // swim this close to the boat to climb aboard
   },
 
+  // 2.7D: the diver moves on a vertical plane (X across, Y down) while the world
+  // stays fully 3D around them — scenery, kelp and animals all live in depth and
+  // swim through it. That makes the stick DIRECT (push up, go up), which is what
+  // removes the need for a second stick to aim movement with.
+  play: {
+    planar: true,           // set false to restore free 3D swimming
+    planeZ: 0,
+    planeSpring: 2.6,       // how firmly the diver is drawn back to the plane
+    bandZ: 1.8,             // objective items spawn within this of the plane
+    enemyBandZ: 7.0,        // animals roam deeper than that, and dive through it
+  },
+
   camera: {
     distance: 6.2,            // third-person trail distance
     minDistance: 0.7,         // backed against a wall it goes near-first-person, which
@@ -27,6 +39,8 @@ export const CONFIG = {
     lookAhead: 3.0,
     followLerp: 7.0,
     fov: 62,
+    planarDistance: 12.5,   // how far out the 2.7D camera sits
+    planarHeight: 3.4,      // lifted and angled down, so the bed recedes
   },
 
   look: {

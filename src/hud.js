@@ -91,7 +91,9 @@ export class Hud {
         hint = `${s.holdKind === 'anchor' ? 'Planting' : 'Drilling'} ${Math.round(s.drillProgress * 100)}%`;
       }
       else if (s.breathing) hint = 'Breathing — tank refilling';
-      else if (s.sonar && s.sonar.mode === 'part' && s.sonar.dist < 5) hint = 'A part is close';
+      else if (s.sonar && s.sonar.mode === 'part' && s.sonar.dist < 5) {
+        hint = { salvage: 'A part is close', beacon: 'Anchor close', haul: 'Crate close' }[obj];
+      }
       this.hint.textContent = hint;
       this.hint.dataset.on = hint ? 'true' : 'false';
     } else {
