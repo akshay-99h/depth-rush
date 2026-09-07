@@ -506,7 +506,38 @@ using the stick only — no teleporting.
 
 ---
 
-## Session 11 — TBD
+## Session 11 — 2026-09-07 · Submission artifacts
+
+**The design-intent document as a real `.docx`.** `tools/make-docx.js` builds it from the
+Markdown source via docx-js. Two things worth noting: the competition asks for *no identifying
+information*, which includes the **document metadata** and not just the prose — so `creator` and
+`lastModifiedBy` are written empty rather than left for the toolchain to stamp with the machine's
+user name. And it asks for *text-only*, so the document carries no images at all.
+
+Verified by reading the file back out of its own XML: 8 paragraphs, **489 prose words** against
+the 500 cap, no `w:drawing` elements, and `docProps/core.xml` carrying nothing but a revision
+number and timestamps.
+
+**`tools/package.sh` now assembles all three artifacts** into `dist/` — the build zip, the
+`.docx` and the build log — so there is one place to upload from.
+
+**Proved the no-network rule empirically rather than by grep.** The packager's grep deliberately
+skips `vendor/`, because Three.js *contains* `fetch` and `XMLHttpRequest` in loaders the game
+never calls — a grep there would fail the build for code that never runs. So the real check is
+behavioural: played slices of three levels and read the browser's network log. Every request is a
+same-origin module load at startup; **none during gameplay, and no external host at all.**
+
+**Audited the shipped zip rather than the working tree.** Unpacked `dist/depth-rush.zip` and
+checked it directly: `index.html` at the top level, zero absolute URLs outside `vendor/`, zero
+network APIs outside `vendor/`, zero minified files.
+
+**Still needs a human.** A real-device playtest. Everything in this log is verified
+programmatically, but the control scheme was rebuilt around thumb feel and that cannot be checked
+from here.
+
+---
+
+## Session 12 — TBD
 
 <!-- Template:
 **Goal.**

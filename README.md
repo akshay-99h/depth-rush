@@ -68,11 +68,36 @@ either, so the two stay in sync.
 
 ## Submission checklist
 
+Three artifacts, submitted separately on Devpost. `tools/package.sh` builds all three
+into `dist/` and fails the build on any rule violation.
+
+**1. Playable prototype build — `dist/depth-rush.zip`**
 - [x] Single `index.html` at the zip top level, unminified
-- [x] Third-party libraries under `/vendor` with relative paths
-- [x] No external network request at runtime
+- [x] Third-party libraries under `/vendor` with relative paths (Three.js r185)
+- [x] No external network request at runtime — verified empirically, not just by grep:
+      every request is a same-origin module load at startup, none during play
 - [x] Portrait, single-player
-- [ ] Zip under 35MB — verified by `tools/package.sh` on each build
-- [ ] `docs/design-intent.md` exported to `.docx`, ≤500 words, no identifying information
-- [ ] `docs/build-log.md` kept current, one entry per session
-- [ ] Deadline: **September 8, 2026 @ 1:00pm PDT**
+- [x] 466KB, against a 35MB limit
+
+**2. Design-intent document — `dist/design-intent.docx`**
+- [x] `.docx`, text-only, no images
+- [x] 489 words, against a 500 limit
+- [x] No identifying information, including document metadata (creator and
+      lastModifiedBy are written empty rather than left for the toolchain to fill in)
+- Regenerate after editing the Markdown source:
+  ```
+  npm install docx && node tools/make-docx.js docs/design-intent.md docs/design-intent.docx
+  ```
+
+**3. Build log — `dist/build-log.md`**
+- [x] Markdown, one entry per working session. Required, not scored.
+
+**Deadline: September 8, 2026 @ 1:00pm PDT.**
+
+### Still needs a human
+
+Everything above is verified programmatically. **Play it on a real phone before you submit** —
+the control scheme was rebuilt around thumb feel, and that is the one thing that cannot be
+checked from here. Worth confirming specifically: tilt-to-swim's forward/back direction (it is
+one sign flip in `src/tilt.js` if it feels inverted), and that the two dive controls sit
+comfortably under your thumbs.

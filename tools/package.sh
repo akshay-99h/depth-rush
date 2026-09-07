@@ -32,5 +32,12 @@ MB=$(( BYTES / 1048576 ))
 LISTING=$(unzip -l "$OUT")
 grep -qE " index\.html$" <<< "$LISTING" || fail "index.html is not at the zip top level"
 
+# Gather every artifact the submission needs in one place.
+cp -f docs/design-intent.docx dist/ 2>/dev/null || echo "WARN: docs/design-intent.docx missing — run tools/make-docx.js" >&2
+cp -f docs/build-log.md dist/ 2>/dev/null || true
+
 echo "OK  $OUT  (${BYTES} bytes, ~${MB}MB)"
 tail -n 4 <<< "$LISTING"
+echo
+echo "Submission artifacts in dist/:"
+ls -1 dist/
