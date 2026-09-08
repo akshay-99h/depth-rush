@@ -109,6 +109,17 @@ The deployed build is for playtesting and the demo video. **The competition subm
 `dist/depth-rush.zip`, not the URL** — and the deployed page makes no external request
 either, so the two stay in sync.
 
+## Documentation
+
+| File | What it is |
+|---|---|
+| `CLAUDE.md` | Contract for AI sessions: hard rules, conventions, known traps |
+| `docs/implementation.md` | How the build works — architecture, 2.7D model, level system |
+| `docs/build-log.md` | How it was made — the prompts and the decisions they produced |
+| `docs/verification.md` | How every claim was measured, and what still needs a human |
+| `docs/design-intent.md` | Submission artifact source (exported to `.docx`) |
+| `docs/ui-design.md` | How the lofi wireframe was interpreted |
+
 ## Submission checklist
 
 Three artifacts, submitted separately on Devpost. `tools/package.sh` builds all three
