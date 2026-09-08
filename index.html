@@ -1001,6 +1001,84 @@
     object-fit: cover; background: #07304f;
   }
 
+  /* ---------- desktop menu layout ----------
+     The supplied art was composed for a portrait phone.  On a wide viewport
+     its backgrounds may still fill the display, but controls and foreground
+     art must use a bounded stage; percentage widths based on a 4K monitor made
+     the loading bar, boat, cards, and action buttons comically wide. */
+  @media (min-width: 768px) {
+    :root { --ui-max: 600px; }
+
+    #screen-landing .ls-title {
+      top: clamp(52px, 16vh, 150px);
+      font-size: clamp(42px, 5vw, 74px);
+    }
+    #load-track { width: min(70%, 660px); }
+    #load-label { font-size: clamp(12px, 1.25vw, 15px); }
+
+    #ss-boat {
+      top: 43%;
+      width: min(70vw, 88vh, 720px);
+    }
+    .ss-gear,
+    .hs-gear { left: clamp(24px, 4vw, 64px); }
+    .ss-start {
+      top: auto;
+      bottom: clamp(72px, 13vh, 132px);
+      min-width: 0;
+      width: min(30vw, 340px);
+      font-size: clamp(18px, 2vw, 27px);
+    }
+    .ss-levels {
+      top: auto;
+      bottom: clamp(20px, 4vh, 42px);
+      min-width: 0;
+      width: min(22vw, 230px);
+      font-size: clamp(14px, 1.5vw, 21px);
+    }
+
+    .al-popup {
+      left: 50%; right: auto;
+      width: min(78vw, 520px);
+      top: clamp(64px, 14vh, 150px);
+      transform: translateX(-50%);
+    }
+    .hs-actions {
+      top: auto;
+      bottom: clamp(52px, 10vh, 108px);
+      gap: 18px;
+    }
+    .hs-btn {
+      min-width: 0;
+      width: min(28vw, 280px);
+      font-size: clamp(18px, 2vw, 27px);
+    }
+
+    #lv-scroll { padding-left: max(5%, calc((100% - 600px) / 2)); padding-right: max(5%, calc((100% - 600px) / 2)); }
+    .lb-card { width: min(78vw, 430px); }
+    .hp-wrap { width: min(78vw, 430px); }
+
+    #end-icon { width: min(14vw, 150px); }
+    #end-title { left: 50%; right: auto; width: min(80vw, 620px); transform: translateX(-50%); }
+    #end-reason { left: 50%; right: auto; width: min(74vw, 540px); transform: translateX(-50%); }
+    #end-card {
+      left: 50%; right: auto;
+      width: min(48vw, 360px);
+      transform: translateX(-50%);
+    }
+    #btn-again { min-width: 0; width: min(26vw, 290px); }
+    #btn-end-levels { min-width: 0; width: min(28vw, 310px); }
+
+    /* Desktop receives the dedicated 16:9 cut, so it can fill the frame
+       without cropping the focal action from the portrait mobile video. */
+    #intro-video { object-fit: cover; }
+    #btn-intro-skip {
+      min-width: 0;
+      width: min(26vw, 290px);
+      font-size: clamp(16px, 1.8vw, 25px);
+    }
+  }
+
 </style>
 </head>
 <body>

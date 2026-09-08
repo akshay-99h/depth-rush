@@ -253,6 +253,12 @@ function playIntro() {
   return new Promise((resolve) => {
     const v = $('intro-video');
     const skip = $('btn-intro-skip');
+    // The portrait film keeps its original framing on phones.  The companion
+    // 16:9 render preserves that focal frame with an extended background, so a
+    // desktop player does not have to crop most of the scene to fill a monitor.
+    const introFile = matchMedia('(min-width: 768px)').matches
+      ? 'IntroVideoDesktop.mp4'
+      : 'IntroVideo.mp4';
     let done = false;
     const finish = () => {
       if (done) return;
@@ -268,7 +274,13 @@ function playIntro() {
     skip.addEventListener('click', finish);
 
     showScreen('intro');
-    if (!v.getAttribute('src')) v.setAttribute('src', video('IntroVideo.mp4'));
+    // A player can resize a browser between runs, so compare the requested
+    // source rather than setting it only on the first intro.
+    const src = video(introFile);
+    if (v.getAttribute('src') !== src) {
+      v.setAttribute('src', src);
+      v.load();
+    }
     try { v.currentTime = 0; } catch { /* not seekable yet */ }
     // Sound is allowed here because this runs inside the START click. If the
     // browser refuses anyway, drop to muted, and if that fails too, move on
