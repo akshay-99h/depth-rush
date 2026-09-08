@@ -60,7 +60,16 @@ export const CONFIG = {
   oxygen: {
     max: 100,
     headHomeBelow: 0.35,      // below this the sonar switches to bearing on the boat
-    baseDrain: 100 / 45,      // a full tank is ~45s of ordinary swimming
+    // A tank has to cover the swim down and back before it buys any working
+    // time, and the dives run from 20m to 60m — so a single fixed capacity
+    // cannot serve both. At a flat 45s, vent-3 left 2 seconds of air once
+    // transit was paid for. Capacity is therefore derived per level in
+    // applyLevel(): enough to reach the bed and return, plus `workingSeconds`
+    // of actual work, whatever the depth. `baseDrain` below is only the
+    // fallback used before a level is applied.
+    baseDrain: 100 / 45,
+    transitSpeed: 2.8,        // metres/second, matches diver.speed
+    workingSeconds: 34,       // air left over after the round trip, every level
     drillMultiplier: 2,
     boostMultiplier: 3,
     tankRefill: 40,

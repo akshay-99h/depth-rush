@@ -4,8 +4,29 @@ A one-thumb underwater salvage race. Your boat is wrecked, five parts are scatte
 seabed, and a storm makes landfall in eight minutes. Dive, drill, surface, repair, escape.
 
 Built for the **Meta Horizon Creator Competition: Game Prototype** (Survival & Resource
-Management genre). Three.js, HTML5, mobile portrait. Structure follows `docs/lofi-game-ui.pdf`;
-see `docs/ui-design.md` for how it was interpreted.
+Management genre). Three.js, HTML5, portrait, single-player. No install, no build step.
+
+**Nine dives across three biomes**, rotating three jobs — salvage, survey and cargo — against
+an eight-minute storm clock. Full design and process documentation lives in the repository
+(see *Documentation* at the end).
+
+## Controls
+
+Portrait phone or a browser window sized tall. Movement is on a vertical plane, so the
+stick maps straight onto it: push up and you go up.
+
+| Control | Does |
+|---|---|
+| **Left stick** | Swim. Push into a boulder to drill it, or into an anchor to plant a beacon |
+| **BOOST** | Speed burst. Costs air, and it is the only thing that breaks a shark's pursuit |
+| **Drag anywhere** (on the boat) | Orbit the view. **SCOUT** adds a stick to pan over the dive site |
+| **Keyboard** (desktop) | `WASD` swim · `Shift`/`Space` boost |
+
+Optional **tilt-to-swim** is in Settings: it drives movement from the device's orientation
+and re-centres on every dive.
+
+The loop: dive, do the job, and get back to the boat before your tank or the storm runs out.
+Surfacing refills your air — the cost is the clock.
 
 ## Run it locally
 
@@ -74,42 +95,34 @@ level, an absolute URL or network API anywhere in shipped code, or an archive ov
 ## Layout
 
 ```
-index.html          entry point + HUD markup and styles (top level of the zip)
+index.html          entry point + all screen markup and styles
 src/config.js       every gameplay tunable — balance here, not in the systems
 src/main.js         screen flow, wiring, game loop
 src/game.js         the simulation: boat mode and dive mode on one clock
-src/world.js        scene construction + per-run level generation
-src/joystick.js     virtual stick + boost
-src/hud.js          DOM HUD bindings
-src/parts.js        the five named boat parts
-src/levels.js       three biomes x three dives, three objectives, progression save/load
+src/levels.js       three biomes x three dives, three objectives, progression
+src/world.js        scene construction + per-level environment and generation
 src/enemies.js      shark / squid / jelly — three threat models, not three reskins
+src/boat.js         the Riverside Workboat
+src/textures.js     every 3D surface, drawn into a canvas at load — no texture files
+src/assets.js       delivered-art URLs, hydration and preloading
+src/landing.js      landing scene composed from delivered sprites
+src/hud.js          DOM HUD bindings
+src/minimap.js      the sonar plot: fog of war + live enemy contacts
+src/joystick.js     sticks, drag-look, hold buttons, keyboard
 src/tilt.js         optional tilt-to-swim, same shape as a stick
-src/textures.js     every surface, drawn into a canvas at load — no texture files
-src/boat.js         the Riverside Workboat, re-aimed and rescaled for a side-on view
-src/minimap.js      the sonar plot: fog-of-war + live shark contacts
-src/audio.js        runtime-synthesised SFX and drone — no audio files, no network
-src/rng.js          seeded RNG so a run can be replayed from its seed
-vendor/             Three.js r185, unminified, no CDN
-docs/ui-design.md       how the lofi was interpreted, and the visual system
-docs/lofi-game-ui.pdf   the source wireframe
-docs/design-intent.md   submission artifact (≤500 words → export to .docx)
-docs/build-log.md       submission artifact (required, not scored)
+src/audio.js        runtime-synthesised SFX — no audio files
+src/parts.js        the named boat parts
+src/rng.js          seeded RNG, so a run replays from its seed
+vendor/             Three.js r185, unminified, vendored — never a CDN
+assets/             delivered art and video
+tools/              serve.py (dev server) · package.sh (build + audit) · make-docx.js
 ```
 
-## Deploy (playable demo)
-
-Static site, no build step — `index.html` at the repo root is the whole app.
-
-`vercel.json` sets cache headers only: `/vendor/*` is immutable (Three.js is vendored by
-hand and never changes without a rename), `/src/*` always revalidates so playtesters never
-get stale game code. `.vercelignore` keeps `docs/`, `tools/` and the zip off the public site.
-
-The deployed build is for playtesting and the demo video. **The competition submission is
-`dist/depth-rush.zip`, not the URL** — and the deployed page makes no external request
-either, so the two stay in sync.
-
 ## Documentation
+
+The full design and process record lives in the repository, not in this build:
+
+<https://github.com/akshay-99h/depth-rush>
 
 | File | What it is |
 |---|---|
@@ -118,40 +131,16 @@ either, so the two stay in sync.
 | `docs/build-log.md` | How it was made — the prompts and the decisions they produced |
 | `docs/verification.md` | How every claim was measured, and what still needs a human |
 | `docs/design-intent.md` | Submission artifact source (exported to `.docx`) |
-| `docs/ui-design.md` | How the lofi wireframe was interpreted |
 
-## Submission checklist
+## Competition constraints
 
-Three artifacts, submitted separately on Devpost. `tools/package.sh` builds all three
-into `dist/` and fails the build on any rule violation.
+This build is shaped by four rules, and `tools/package.sh` enforces the first three:
 
-**1. Playable prototype build — `dist/depth-rush.zip`**
-- [x] Single `index.html` at the zip top level, unminified
-- [x] Third-party libraries under `/vendor` with relative paths (Three.js r185)
-- [x] No external network request at runtime — verified empirically, not just by grep:
-      every request is a same-origin module load at startup, none during play
-- [x] Portrait, single-player
-- [x] 466KB, against a 35MB limit
-
-**2. Design-intent document — `dist/design-intent.docx`**
-- [x] `.docx`, text-only, no images
-- [x] 489 words, against a 500 limit
-- [x] No identifying information, including document metadata (creator and
-      lastModifiedBy are written empty rather than left for the toolchain to fill in)
-- Regenerate after editing the Markdown source:
-  ```
-  npm install docx && node tools/make-docx.js docs/design-intent.md docs/design-intent.docx
-  ```
-
-**3. Build log — `dist/build-log.md`**
-- [x] Markdown, one entry per working session. Required, not scored.
-
-**Deadline: September 8, 2026 @ 1:00pm PDT.**
-
-### Still needs a human
-
-Everything above is verified programmatically. **Play it on a real phone before you submit** —
-the control scheme was rebuilt around thumb feel, and that is the one thing that cannot be
-checked from here. Worth confirming specifically: tilt-to-swim's forward/back direction (it is
-one sign flip in `src/tilt.js` if it feels inverted), and that the two dive controls sit
-comfortably under your thumbs.
+- **No external network request at runtime.** Three.js is vendored rather than loaded from a
+  CDN, every 3D texture is drawn into a canvas at load, and there are no webfonts. Verified
+  behaviourally: playing the game issues no request at all beyond the same-origin module
+  loads at startup.
+- **A single `index.html` at the top level of the zip, unminified.** No bundler, no build step.
+- **Under 35MB zipped.** The delivered art ships at 1x-4x; each asset ships only the tier it
+  needs, which is what keeps the build inside the limit.
+- **Portrait, single-player.**

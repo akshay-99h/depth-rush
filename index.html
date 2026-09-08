@@ -989,8 +989,8 @@
      buttons are intentionally circular cutouts: labels are available to screen
      readers, while the common next/retry/map symbols need no visual copy. */
   #end-actions {
-    position: absolute; left: 50%; top: 61%; transform: translateX(-50%);
-    display: flex; flex-direction: column; align-items: center; gap: 10px;
+    position: absolute; left: 50%; top: 64%; transform: translateX(-50%);
+    display: flex; flex-direction: row; align-items: center; gap: 14px;
   }
   .end-icon-btn {
     width: clamp(54px, 15vw, 76px); height: clamp(54px, 15vw, 76px);
@@ -1091,7 +1091,7 @@
       width: min(48vw, 360px);
       transform: translateX(-50%);
     }
-    #end-actions { gap: 12px; }
+    #end-actions { gap: 18px; }
 
     /* Desktop receives the dedicated 16:9 cut, so it can fill the frame
        without cropping the focal action from the portrait mobile video. */

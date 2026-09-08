@@ -21,7 +21,9 @@ for kw in "fetch(" "XMLHttpRequest" "WebSocket" "importScripts" "navigator.sendB
   fi
 done
 
-zip -rq "$OUT" index.html src vendor assets -x '.*' -x '*/.*'
+# README and tools ship too: the README tells whoever unzips this how to run
+# it, and its recommended command is tools/serve.py.
+zip -rq "$OUT" index.html README.md src vendor assets tools -x '.*' -x '*/.*' -x '*.DS_Store'
 
 BYTES=$(wc -c < "$OUT" | tr -d ' ')
 MB=$(( BYTES / 1048576 ))

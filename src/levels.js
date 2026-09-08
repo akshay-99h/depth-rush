@@ -150,6 +150,14 @@ export function applyLevel(level) {
   });
   CONFIG.parts = { count: level.goal };
   CONFIG.objectiveKind = level.objective;
+
+  // Size the tank to the dive: the round trip to the bed, plus a constant
+  // amount of working air on top. A level may override with `oxygenSeconds`.
+  const depth = Math.abs(CONFIG.world.seabedY - CONFIG.world.surfaceY);
+  const transit = (depth * 2) / CONFIG.oxygen.transitSpeed;
+  const seconds = level.oxygenSeconds ?? (transit + CONFIG.oxygen.workingSeconds);
+  CONFIG.oxygen.tankSeconds = seconds;
+  CONFIG.oxygen.baseDrain = CONFIG.oxygen.max / seconds;
   CONFIG.training = level.training;
   CONFIG.enemies = level.enemies;
 
