@@ -1,39 +1,32 @@
-# Depth Rush — Design Intent
+## 1. Game title and genre
 
-**Target players.** Mobile arcade players who already run Subway Surfers or Alto's Odyssey, plus
-players who enjoy light resource tension. Portrait, one phone, a few minutes per dive, ages 10+.
-The context is a commute or a queue.
+Depth Rush - Survival & Resource Management
 
-**Concept.** A salvage diver works a wreck site with eight minutes before the storm lands. Air is
-the currency: it drains while you work, refills only at the surface, and the swim back always costs
-more than you think. Every dive is a bet on how much you can finish before you have to go up.
+## 2. Target player and pitch
 
-**Core loop.** Three jobs share every underlying system — swimming, air, the storm clock, sonar,
-enemies — and differ in the shape of the trip they ask for. *Salvage*: search the bed, carry parts
-home, fit them. *Survey*: load beacons at the boat, carry them out, plant them on marked anchors.
-*Cargo*: one crate at a time, slowed and burning air faster, so it is many trips and no batching.
-Each of three biomes runs all three jobs, so a biome teaches the full set and the deeper biomes
-re-test them in worse water.
+Depth Rush is for mobile players who enjoy short arcade sessions with resource pressure. A solo diver repairs a damaged boat before a storm arrives, deciding how much work to attempt before oxygen or time runs out.
 
-**Learning objective.** Every dive is framed as a training exercise and names the skill it drills:
-air discipline, trip planning, load handling, search pattern, reserve management, threat avoidance,
-light discipline, dead reckoning, endurance. Each one is *measured* against real gameplay data —
-lowest tank reading, number of dives taken, animal contacts, percentage of the site swept — and the
-end-of-run debrief reports what you achieved against the target and whether you met it. It is a
-secondary goal worth a score bonus, never a gate, so it teaches without blocking.
+## 3. How to play (controls)
 
-**Controls.** Two, because it is a phone. The diver moves on a vertical plane — the stick maps
-straight onto it, so push up and you go up — while the world stays fully 3D around you and animals
-swim through it in depth. Nothing needs aiming, so there is no camera to manage. Boost is the only
-other button. Tilt-to-swim can replace the stick outright for players who prefer it.
+Tap through the landing screen, choose any dive, then tap DIVE. Underwater, drag the virtual stick: up ascends, down descends, and left/right cross the site. Hold BOOST to sprint and break a shark pursuit at an oxygen cost. Push the stick into sealed rocks or survey anchors and hold to drill or plant. Swim to the boat to surface; use REPAIR or the job call-in on deck. Tilt can replace the stick.
 
-**What's in the prototype.** Nine dives across three biomes, all unlocked, spanning 26m to 40m
-across and 20m to 60m deep. Three enemy types with genuinely different threat models: sharks hunt
-and kill, and only boost breaks a pursuit; squid ambush and tear air out of the tank rather than
-killing; jellies never hunt but sting and stall anything that drifts into them. Depth darkens the
-water for real — fog, ambient and sun all fall off, and your lamp pushes back. A top-down sonar plot
-with fog of war. From the deck you can orbit and pan the camera over the site to plan a route.
+## 4. Core loop
 
-**Future vision.** Permanent upgrades to tank, fins and lamp; daily seeded dives with leaderboards
-and ghost replays; storm escalation that scrambles the sonar; colourblind-safe HUD states;
-rewarded-ad continues and cosmetic-only purchases, never pay-to-win.
+The diver leaves with a full tank, follows the sonar plot, works, and returns before oxygen, sharks, or the storm end the run. Salvage recovers parts and repairs them on deck. Survey loads beacons, plants them at anchors, then calls them in. Cargo returns one crate at a time while moving slower and draining oxygen faster. Oxygen, the clock, warnings, contacts, checklist, score, and debrief show whether the plan worked. The repeated decision is whether to return safely now or risk another task.
+
+## 5. What is in this prototype
+
+- Nine dives across the Continental Shelf, Kelp Trench, and Abyssal Vent; all selectable.
+- Salvage, survey, and cargo jobs.
+- Portrait controls, tilt movement, boat scouting, sonar fog of war, oxygen, boost, storm timer, local best scores, and training debriefs.
+- Pursuing lethal sharks; oxygen-draining ambush squid; drifting jelly hazards that stun and cost oxygen.
+- Per-run tanks, fins, and floodlights; procedural levels; saved clears, best scores, and stars.
+- Not included: permanent upgrades, online leaderboards or ghost replays, daily challenges, payments, multiplayer, or a campaign story.
+
+## 6. Progression and signature twist
+
+The route progresses from shallower shelf dives to darker, deeper trench and vent dives, with more hazards and longer trips. Each biome presents salvage, survey, then cargo. Every dive has a measured training objective, such as retaining an oxygen reserve, avoiding contacts, or surveying enough of the site; meeting it adds a score bonus but never blocks play. The signature mechanic is 2.7D swimming: the world and hazards are 3D, but the diver moves on a vertical plane, so the stick is direct rather than camera-aimed.
+
+## 7. Future-state vision
+
+The full game would add a longer progression built around permanent tank, fin, and lamp upgrades, seeded daily dives with leaderboards and ghost replays, and storm conditions that alter navigation. It would retain the short, replayable dive structure rather than turn into an open-world diving game.

@@ -16,15 +16,28 @@ const OUT = process.argv[3];
 const md = fs.readFileSync(SRC, 'utf8');
 const lines = md.split('\n');
 
-let title = 'Design Intent';
+// The competition specifies seven exact section headings and does not permit
+// an extra document title. Source headings become Word headings; all other
+// blocks become body paragraphs or bullets.
 const blocks = [];
 let buf = [];
+const flush = () => {
+  if (buf.length) { blocks.push({ type: 'body', text: buf.join(' ') }); buf = []; }
+};
 for (const line of lines) {
-  if (line.startsWith('# ')) { title = line.slice(2).trim(); continue; }
-  if (line.trim() === '') { if (buf.length) { blocks.push(buf.join(' ')); buf = []; } continue; }
-  buf.push(line.trim());
+  if (line.startsWith('## ')) {
+    flush();
+    blocks.push({ type: 'heading', text: line.slice(3).trim() });
+  } else if (line.startsWith('- ')) {
+    flush();
+    blocks.push({ type: 'bullet', text: line.slice(2).trim() });
+  } else if (line.trim() === '') {
+    flush();
+  } else {
+    buf.push(line.trim());
+  }
 }
-if (buf.length) blocks.push(buf.join(' '));
+flush();
 
 // Split a paragraph into bold / italic / plain runs.
 function runs(text) {
@@ -46,17 +59,20 @@ const doc = new Document({
   creator: '', description: '', title: '', lastModifiedBy: '',
   sections: [{
     properties: { page: { size: { width: 12240, height: 15840 } } },   // US Letter
-    children: [
-      new Paragraph({
-        alignment: AlignmentType.LEFT,
-        spacing: { after: 260 },
-        children: [new TextRun({ text: title, bold: true, size: 30 })],
-      }),
-      ...blocks.map((b) => new Paragraph({
-        spacing: { after: 190, line: 280 },
-        children: runs(b),
-      })),
-    ],
+    children: blocks.map((block) => {
+      if (block.type === 'heading') {
+        return new Paragraph({
+          heading: 'Heading1',
+          spacing: { before: 190, after: 90 },
+          children: [new TextRun({ text: block.text, bold: true, size: 25, color: '000000' })],
+        });
+      }
+      return new Paragraph({
+        bullet: block.type === 'bullet' ? { level: 0 } : undefined,
+        spacing: { after: block.type === 'bullet' ? 80 : 150, line: 260 },
+        children: runs(block.text),
+      });
+    }),
   }],
 });
 
