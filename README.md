@@ -9,15 +9,58 @@ see `docs/ui-design.md` for how it was interpreted.
 
 ## Run it locally
 
-```
+Depth Rush is a static HTML/JavaScript game: there is no install or build step. It must,
+however, be opened through an HTTP server because it uses browser ES modules. Double-clicking
+`index.html` opens it as `file://` and browsers block those module imports.
+
+From this project folder, use any of these options, then visit the listed localhost URL.
+
+### Recommended — project server (no install)
+
+```bash
 python3 tools/serve.py 5173 .
 ```
 
-(`tools/serve.py` disables caching. Plain `http.server` lets browsers heuristically cache
-ES modules, which shows up as a bogus "does not provide an export named X" after an edit.)
+Open <http://localhost:5173>. This is the preferred option because it disables caching, so
+edits to ES modules are reflected straight away.
 
-Then open <http://localhost:5173> — use your browser's device toolbar in portrait to play it as
-intended. ES modules need a server; opening `index.html` from the filesystem will not work.
+### Python built-in server (no install)
+
+```bash
+python3 -m http.server 5173
+```
+
+Open <http://localhost:5173>. This is fine for a quick playtest. After editing JavaScript,
+do a hard refresh if the browser appears to be using an older module.
+
+### Node.js static server
+
+With Node.js installed, either command starts a local static server without changing project
+dependencies:
+
+```bash
+npx serve . -l 5173
+# or
+npx http-server . -p 5173 -c-1
+```
+
+Open the localhost address printed by the command (normally <http://localhost:5173>). The
+first use may download the chosen server package.
+
+### Editor server
+
+If you use VS Code, the **Live Server** extension can serve `index.html`: open the project
+folder, right-click `index.html`, and choose **Open with Live Server**. Use its local URL, not
+the file directly. Other IDE/editor live-preview servers work equally well.
+
+### Any other static web server
+
+Apache, Nginx, Caddy, PHP's built-in server (`php -S localhost:5173`), a Docker static-server
+image, or a static-hosting preview all work. Serve the `depth-rush/` directory as the web root
+and keep the existing relative paths intact.
+
+Use your browser's device toolbar in portrait to play it as intended; desktop layouts are also
+supported for menu and intro playback.
 
 ## Build the submission zip
 
