@@ -35,6 +35,17 @@ const _yawEuler = new THREE.Euler(0, 0, 0, 'YXZ');
 const _colShallow = new THREE.Color();
 const _colDeep = new THREE.Color();
 
+// Boat parts have illustrated silhouettes in the checklist. These resources
+// only exist as 3D pickups, so use a compact emoji fallback whenever they are
+// named in the HUD or a toast.
+const RESOURCE_EMOJI = Object.freeze({
+  air: '🫧',
+  fins: '🦶',
+  light: '🔦',
+  beacon: '📡',
+  crate: '📦',
+});
+
 // Gameplay proximity. On the plane the diver cannot steer in Z, so Z must not
 // count against reaching something — otherwise an item a couple of metres off
 // the plane is simply unreachable. Collision stays honestly 3D.
@@ -590,7 +601,7 @@ export class Game {
         c.mesh.scale.setScalar(0.8);
         this.diver.add(c.mesh);
         this.audio.partFound();
-        this.hooks.onToast?.('Crate on the line — you are slow now');
+        this.hooks.onToast?.(`${RESOURCE_EMOJI.crate} Crate on the line — you are slow now`);
         break;
       }
     }
@@ -601,13 +612,13 @@ export class Game {
       this.audio.pickup();
       if (item.kind === 'tank') {
         s.oxygen = Math.min(CONFIG.oxygen.max, s.oxygen + CONFIG.oxygen.tankRefill);
-        this.hooks.onToast?.('Spare tank');
+        this.hooks.onToast?.(`${RESOURCE_EMOJI.air} Spare air tank`);
       } else if (item.kind === 'fins') {
         s.finStacks = Math.min(CONFIG.fins.maxStacks, s.finStacks + 1);
-        this.hooks.onToast?.('Fins — faster this dive');
+        this.hooks.onToast?.(`${RESOURCE_EMOJI.fins} Fins — faster this dive`);
       } else {
         s.lightStacks = Math.min(CONFIG.floodlight.maxStacks, s.lightStacks + 1);
-        this.hooks.onToast?.('Floodlight — you can see further');
+        this.hooks.onToast?.(`${RESOURCE_EMOJI.light} Floodlight — you can see further`);
       }
     }
 
@@ -668,7 +679,7 @@ export class Game {
     });
     this.audio.installed();
     for (let i = 0; i < 6; i++) this._emitBubble(anchor.x, anchor.y + 0.5, anchor.z, true);
-    this.hooks.onToast?.(`Beacon planted — ${s.planted}/${this.partsTotal}`);
+    this.hooks.onToast?.(`${RESOURCE_EMOJI.beacon} Beacon planted — ${s.planted}/${this.partsTotal}`);
   }
 
   _stowCrate() {
@@ -792,7 +803,7 @@ export class Game {
     } else {
       s.oxygen = Math.min(CONFIG.oxygen.max, s.oxygen + CONFIG.oxygen.tankRefill);
       this.audio.pickup();
-      this.hooks.onToast?.('Air pocket');
+      this.hooks.onToast?.(`${RESOURCE_EMOJI.air} Air pocket`);
     }
   }
 

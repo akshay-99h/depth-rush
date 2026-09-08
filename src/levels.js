@@ -198,20 +198,21 @@ export function saveResult(levelId, outcome, score, stars = 0) {
   return p;
 }
 
-// Dives open in order: the first is always available, and each one after it
-// unlocks when the dive before it has been cleared.
+// A recorded star is proof the dive was completed, even if an older save missed
+// its `cleared` flag. One star is enough to progress; extra stars are mastery,
+// not a requirement for unlocking the next mission.
+export function isCleared(id, progress) {
+  return !!progress?.cleared?.[id] || (progress?.stars?.[id] ?? 0) > 0;
+}
+
+// Dives unlock in order. The level map always shows every mission, but only
+// the next one after any completed rating can be selected.
 export function isUnlocked(id, progress) {
   const i = LEVELS.findIndex((l) => l.id === id);
   if (i <= 0) return true;
-  return !!progress?.cleared?.[LEVELS[i - 1].id];
-}
-
-/** How many dives have been cleared — the start screen uses this to decide
- *  whether the level picker is worth offering yet. */
-export function clearedCount(progress) {
-  return LEVELS.filter((l) => progress?.cleared?.[l.id]).length;
+  return isCleared(LEVELS[i - 1].id, progress);
 }
 
 export function firstUnplayed(progress) {
-  return (LEVELS.find((l) => !progress.cleared[l.id] && isUnlocked(l.id, progress)) ?? LEVELS[0]).id;
+  return (LEVELS.find((l) => !isCleared(l.id, progress) && isUnlocked(l.id, progress)) ?? LEVELS[0]).id;
 }

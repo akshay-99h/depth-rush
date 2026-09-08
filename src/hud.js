@@ -106,16 +106,16 @@ export class Hud {
       if (obj === 'beacon') {
         const left = total - s.planted;
         this.boatStatus.innerHTML = done >= total
-          ? 'Survey complete.'
+          ? '📡 Survey complete.'
           : carried
-            ? `Carrying <b>${carried}</b> beacon${carried === 1 ? '' : 's'} — ${left} anchor${left === 1 ? '' : 's'} left`
-            : `Hold Load to take beacons aboard — ${left} anchor${left === 1 ? '' : 's'} left`;
+            ? `📡 Carrying <b>${carried}</b> beacon${carried === 1 ? '' : 's'} — ${left} anchor${left === 1 ? '' : 's'} left`
+            : `📡 Hold Load to take beacons aboard — ${left} anchor${left === 1 ? '' : 's'} left`;
       } else if (obj === 'haul') {
         this.boatStatus.innerHTML = done >= total
-          ? 'All cargo delivered.'
+          ? '📦 All cargo delivered.'
           : carried
-            ? 'Crate on deck — hold Unload to secure it'
-            : `Dive for the next crate — <b>${total - done}</b> left`;
+            ? '📦 Crate on deck — hold Unload to secure it'
+            : `📦 Dive for the next crate — <b>${total - done}</b> left`;
       } else {
         this.boatStatus.innerHTML = carried
           ? `Carrying <b>${carried}</b> part${carried === 1 ? '' : 's'} — hold Repair to fit ${carried === 1 ? 'it' : 'them'}`

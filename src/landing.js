@@ -6,10 +6,9 @@
 // composed here from those. Swapping in a single flattened backdrop later means
 // dropping one entry into WATER and emptying FLORA.
 //
-// The bar is the delivered art too. Its cyan fill is baked in at ~70%, so it
-// cannot animate as shipped; assets/derived/ holds an emptied track and the fill
-// sliced out of it, both cut from the same source image.
-import { asset, derived, preload } from './assets.js';
+// The loading bar is CSS so it can remain a compact, single layer at every
+// screen size rather than stretching the source artwork's decorative frame.
+import { asset, preload } from './assets.js';
 
 // Sprites are drawn at roughly a quarter of the screen width, so their 1x files
 // are already well past the pixel density they need. The water is a soft
@@ -64,14 +63,10 @@ export function startLanding() {
     flora.appendChild(img);
   });
 
-  // The fill is positioned inside the bar against the track measured out of the
-  // source image, so it lines up with the painted frame at any size.
-  const FILL_MAX = 92.7;   // % of the bar image the inner track spans
   let shown = 0;           // what the bar is currently displaying
   let target = 0;          // what has actually loaded
 
-  const urls = [water.src, ...FLORA.map((f) => asset(f.folder, 1)),
-                derived('loading-bar-track.webp'), derived('loading-bar-fill.webp')];
+  const urls = [water.src, ...FLORA.map((f) => asset(f.folder, 1))];
 
   preload(urls, (p) => { target = p; }).then((failed) => {
     if (failed.length) console.warn('[landing] failed to load:', failed);
@@ -103,7 +98,7 @@ export function startLanding() {
       const cap = Math.min(target, elapsed / MIN_SECONDS);
       shown += (cap - shown) * Math.min(1, dt * 6);
       if (cap - shown < 0.004) shown = cap;
-      fill.style.width = `${shown * FILL_MAX}%`;
+      fill.style.transform = `scaleX(${shown})`;
 
       if (!ready && shown >= 0.999) {
         ready = true;

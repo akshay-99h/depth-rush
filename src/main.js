@@ -11,7 +11,7 @@ import { Minimap } from './minimap.js';
 import { Tilt } from './tilt.js';
 import { CONFIG } from './config.js';
 import { LEVELS, BIOMES, applyLevel, getLevel, getBiome, loadProgress, saveResult,
-         isUnlocked, firstUnplayed, clearedCount, ratingFor, MAX_STARS } from './levels.js';
+         isCleared, isUnlocked, firstUnplayed, ratingFor, MAX_STARS } from './levels.js';
 import { startLanding } from './landing.js';
 import { hydrateAssets, resolve, video } from './assets.js';
 
@@ -82,20 +82,18 @@ addEventListener('orientationchange', resize);
 
 /* --------------------------------------------------------------- landing */
 
-// The landing screen owns its own scene, preloading and bar; its tap starts the
-// first dive intro directly. The tap is also what unlocks audio.
+// The landing screen owns its own scene, preloading and bar. Its tap opens the
+// map so players can see the full mission path, including locked later dives.
 startLanding().then(() => {
   audio.unlock();
-  startLevel(getLevel(firstUnplayed(progress)), true);
+  showMenu();
 });
 
 /* ------------------------------------------------------------------ menu */
 
 function showMenu() {
   progress = loadProgress();
-  // The picker only earns its place once a dive has been cleared — before that
-  // there is exactly one dive open and Start goes straight to it.
-  $('btn-levels').hidden = clearedCount(progress) === 0;
+  $('btn-levels').hidden = false;
   showScreen('menu');
 }
 
@@ -181,10 +179,10 @@ function showLevels() {
   const list = $('levels-list');
   list.innerHTML = BIOMES.map((b) => {
     const inBiome = LEVELS.filter((l) => l.biome === b.id);
-    const done = inBiome.filter((l) => progress.cleared[l.id]).length;
+    const done = inBiome.filter((l) => isCleared(l.id, progress)).length;
     const rows = inBiome.map((l) => {
       const unlocked = isUnlocked(l.id, progress);
-      const cleared = !!progress.cleared[l.id];
+      const cleared = isCleared(l.id, progress);
       const best = progress.best[l.id] ?? 0;
       const stars = progress.stars?.[l.id] ?? 0;
       const node = cleared ? '&#10003;' : unlocked ? LEVELS.indexOf(l) + 1 : '&#128274;';
@@ -505,6 +503,10 @@ async function showEnd(outcome, reason, s) {
   const spec = GAME_OVER[s.cause] ?? GAME_OVER.quit;
   const stars = ratingFor(outcome, s, CONFIG.run.stormSeconds);
   progress = saveResult(currentLevel.id, outcome, s.score, stars);
+  const nextLevel = LEVELS[LEVELS.indexOf(currentLevel) + 1];
+  const canAdvance = outcome === 'win' && nextLevel && isUnlocked(nextLevel.id, progress);
+  $('btn-end-next').hidden = !canAdvance;
+  $('btn-end-next').dataset.next = canAdvance ? nextLevel.id : '';
 
   const el = $('screen-end');
   el.dataset.outcome = outcome;
@@ -531,6 +533,10 @@ async function showEnd(outcome, reason, s) {
 }
 
 $('btn-again').addEventListener('click', () => startLevel(currentLevel));
+$('btn-end-next').addEventListener('click', () => {
+  const next = $('btn-end-next').dataset.next;
+  if (next) startLevel(getLevel(next));
+});
 $('btn-end-levels').addEventListener('click', showLevels);
 
 /* ------------------------------------------------------------------ loop */
