@@ -1,5 +1,7 @@
-// Screen flow and wiring. The lofi's seven screens map to five states here:
-// landing -> ftux -> boat <-> dive -> end, with settings as a modal over any of them.
+// Screen flow and wiring:
+//   landing -> start -> [intro film] -> alert -> boat <-> dive -> end
+// with settings as a modal over any of them, and level select reachable from
+// the end screen.
 import { createRenderer, createCamera, createScene, buildEnvironment } from './world.js';
 import { Stick, DragLook, bindHold, bindKeyboard } from './joystick.js';
 import { Audio } from './audio.js';
@@ -10,6 +12,11 @@ import { Tilt } from './tilt.js';
 import { CONFIG } from './config.js';
 import { LEVELS, BIOMES, applyLevel, getLevel, getBiome,
          loadProgress, saveResult, isUnlocked, firstUnplayed } from './levels.js';
+import { startLanding } from './landing.js';
+import { hydrateAssets, resolve, video } from './assets.js';
+
+// Point every [data-asset] element in the markup at its image up front.
+hydrateAssets();
 
 
 const $ = (id) => document.getElementById(id);
@@ -27,7 +34,7 @@ const tilt = new Tilt();
 const hud = new Hud();
 const minimap = new Minimap($('minimap'));
 
-const SCREENS = ['landing', 'menu', 'levels', 'ftux', 'boat', 'dive', 'end'];
+const SCREENS = ['landing', 'menu', 'intro', 'alert', 'levels', 'boat', 'deck', 'dive', 'clip', 'end'];
 let screen = 'landing';
 
 const game = new Game({
@@ -35,7 +42,11 @@ const game = new Game({
   hooks: {
     onToast: (t) => hud.toastMessage(t),
     onMode: (mode) => {
-      if (screen === 'boat' || screen === 'dive') showScreen(mode);
+      // The painted home screen is the pre-dive one only. Coming up out of a
+      // dive lands on the 3D deck, which is where repairs are made.
+      if (screen === 'boat' || screen === 'deck' || screen === 'dive') {
+        showScreen(mode === 'dive' ? 'dive' : 'deck');
+      }
     },
     onEnd: (outcome, reason, state) => showEnd(outcome, reason, state),
   },
@@ -55,10 +66,9 @@ function flashScoutHint() {
 function showScreen(next) {
   screen = next;
   for (const id of SCREENS) $(`screen-${id}`).dataset.on = String(id === next);
-  $('hud').dataset.on = String(next === 'boat' || next === 'dive');
-  $('ship-progress').style.display = next === 'boat' || next === 'dive' ? '' : 'none';
+  $('hud').dataset.on = String(next === 'dive' || next === 'deck');
   if (next !== 'dive') { moveStick.reset(); lookStick.reset(); }
-  if (next !== 'boat') { panStick.reset(); boatLook.reset(); }
+  if (next !== 'deck') { panStick.reset(); boatLook.reset(); }
 }
 
 function resize() {
@@ -72,37 +82,24 @@ addEventListener('orientationchange', resize);
 
 /* --------------------------------------------------------------- landing */
 
-let loadBar = 0;   // renamed: `loadProgress` is now the saved-progress import
-function tickLoading(dt) {
-  loadBar = Math.min(1, loadBar + dt * 0.85);
-  $('load-fill').style.width = `${loadBar * 100}%`;
-  if (loadBar >= 1) {
-    $('load-label').textContent = 'Tap to begin';
-    $('screen-landing').onclick = () => {
-      audio.unlock();
-      $('screen-landing').onclick = null;
-      showMenu();
-    };
-  }
-}
+// The landing screen owns its own scene, preloading and bar; it resolves when
+// the player taps to begin. The tap is also what unlocks audio.
+startLanding().then(() => {
+  audio.unlock();
+  showMenu();
+});
 
 /* ------------------------------------------------------------------ menu */
 
 function showMenu() {
   progress = loadProgress();
-  const cleared = Object.keys(progress.cleared).length;
-  $('menu-note').textContent = cleared
-    ? `${cleared} of ${LEVELS.length} dives cleared`
-    : 'Nine dives across three biomes';
   showScreen('menu');
 }
 
 $('btn-play').addEventListener('click', () => {
   audio.unlock();
-  startLevel(getLevel(firstUnplayed(progress)));
+  startLevel(getLevel(firstUnplayed(progress)), true);
 });
-$('btn-levels').addEventListener('click', () => { audio.unlock(); showLevels(); });
-$('btn-menu-settings').addEventListener('click', openSettings);
 $('btn-levels-back').addEventListener('click', showMenu);
 
 function showLevels() {
@@ -162,41 +159,119 @@ function showLevels() {
 
 // Applying a level rewrites the shared CONFIG, so the minimap grid and the
 // scene both have to be rebuilt around the new dimensions before the run.
-function startLevel(level) {
-  currentLevel = level;
-  applyLevel(level);
-  game.setEnvironment(buildEnvironment(scene));
-  minimap.rebuild();
-  if (!localStorage.getItem('depthrush.seenFtux')) {
-    try { localStorage.setItem('depthrush.seenFtux', '1'); } catch { /* private mode */ }
-    startFtux();
-  } else {
+//
+// The intro film plays only on START from the front screen. Retrying or picking
+// a dive goes straight to the briefing — a ten-second clip in front of every
+// retry would wear out fast.
+//
+// Both the film and the briefing wait on the player, so a second tap partway
+// through would leave one run half-started and begin another on top of it.
+let starting = false;
+async function startLevel(level, withIntro = false) {
+  if (starting) return;
+  starting = true;
+  try {
+    currentLevel = level;
+    applyLevel(level);
+    game.setEnvironment(buildEnvironment(scene));
+    minimap.rebuild();
+    if (withIntro) await playIntro();
+    await showAlert();
     beginRun();
+  } finally {
+    starting = false;
   }
 }
 
-/* ------------------------------------------------------------------ ftux */
+/* ----------------------------------------------------------- intro video */
 
-let ftuxTimers = [];
-function startFtux() {
-  showScreen('ftux');
-  ftuxTimers.forEach(clearTimeout);
-  ftuxTimers = [];
-  const beats = [...document.querySelectorAll('.beat')];
-  beats.forEach((b) => { b.dataset.on = 'false'; });
-  beats.forEach((b, i) => {
-    ftuxTimers.push(setTimeout(() => { b.dataset.on = 'true'; }, 500 + i * 900));
+function playIntro() {
+  return new Promise((resolve) => {
+    const v = $('intro-video');
+    const skip = $('btn-intro-skip');
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      v.pause();
+      v.removeEventListener('ended', finish);
+      v.removeEventListener('error', finish);
+      skip.removeEventListener('click', finish);
+      resolve();
+    };
+    v.addEventListener('ended', finish);
+    v.addEventListener('error', finish);
+    skip.addEventListener('click', finish);
+
+    showScreen('intro');
+    if (!v.getAttribute('src')) v.setAttribute('src', video('IntroVideo.mp4'));
+    try { v.currentTime = 0; } catch { /* not seekable yet */ }
+    // Sound is allowed here because this runs inside the START click. If the
+    // browser refuses anyway, drop to muted, and if that fails too, move on
+    // rather than stranding the player on a black screen.
+    v.muted = false;
+    v.play().catch(() => {
+      v.muted = true;
+      v.play().catch(finish);
+    });
   });
-  ftuxTimers.push(setTimeout(beginRun, 500 + beats.length * 900 + 1400));
 }
 
-$('btn-skip').addEventListener('click', () => { audio.unlock(); beginRun(); });
+/* ------------------------------------------------------------ briefing */
+
+function showAlert() {
+  return new Promise((resolve) => {
+    showScreen('alert');
+    const ok = $('btn-alert-ok');
+    const go = () => { ok.removeEventListener('click', go); audio.unlock(); resolve(); };
+    ok.addEventListener('click', go);
+  });
+}
+
+
+/* -------------------------------------------------------- how to play */
+
+// Reachable from the ? on both harbour screens. The briefing sits behind it and
+// the storm clock has not started there, so nothing is paused; opening it from
+// the home screen does pause, because the clock is running by then.
+const helpModal = $('modal-help');
+function openHelp() {
+  helpModal.dataset.on = 'true';
+  if (screen === 'boat' || screen === 'deck') game.paused = true;
+}
+function closeHelp() {
+  helpModal.dataset.on = 'false';
+  if (screen === 'boat' || screen === 'deck') game.paused = false;
+}
+$('btn-boat-help').addEventListener('click', openHelp);
+
+/* ------------------------------------------------------- checklist pill */
+
+// Both pills — the beige one on the home screen and the blue one underwater —
+// open and close the same way.
+function bindPill(buttonId, pillId) {
+  const el = $(pillId);
+  let timer = null;
+  $(buttonId).addEventListener('click', () => {
+    clearTimeout(timer);
+    if (el.dataset.on === 'true') {
+      el.dataset.on = 'closing';
+      timer = setTimeout(() => { el.dataset.on = 'false'; }, 190);
+    } else {
+      el.dataset.on = 'true';
+    }
+  });
+}
+bindPill('btn-boat-list', 'checklist-pill');
+bindPill('btn-checklist', 'uw-pill');
+$('al-help').addEventListener('click', openHelp);
+$('btn-help-close').addEventListener('click', closeHelp);
+// Tapping the scene around the scroll closes it too.
+helpModal.querySelector('.scrim').addEventListener('click', closeHelp);
 
 /* ------------------------------------------------------------------- run */
 
 function beginRun() {
-  ftuxTimers.forEach(clearTimeout);
-  ftuxTimers = [];
   game.startRun();
   showScreen('boat');
   hud.toastMessage(`${getBiome(currentLevel.biome).name} — ${currentLevel.name}`);
@@ -210,24 +285,24 @@ function beginRun() {
 }
 
 bindHold($('btn-boost'), (on) => { game.boostHeld = on; });
+bindKeyboard(moveStick, lookStick, (on) => { game.boostHeld = on; });
+
+const dive = () => { audio.unlock(); game.setMode('dive'); };
+$('btn-dive').addEventListener('click', dive);        // painted home, pre-dive
+$('btn-deck-dive').addEventListener('click', dive);   // 3D deck, mid-run
+
 $('btn-recentre').addEventListener('click', () => game.recentre());
 $('btn-scout').addEventListener('click', () => {
-  const el = $('screen-boat');
+  const el = $('screen-deck');
   const on = el.dataset.scout !== 'on';
   el.dataset.scout = on ? 'on' : 'off';
   if (on) flashScoutHint();
   else { panStick.reset(); game.recentre(); }
 });
-bindKeyboard(moveStick, lookStick, (on) => { game.boostHeld = on; });
-
-$('btn-dive').addEventListener('click', () => {
-  audio.unlock();
-  game.setMode('dive');
-});
 
 // Repair is a hold, not a tap: the seconds it costs have to be felt while the
 // storm clock is visibly running.
-const repairBtn = $('btn-repair');
+const repairBtn = $('btn-deck-repair');
 const repairOn = (e) => { e.preventDefault(); audio.unlock(); game.setRepairing(true); };
 const repairOff = (e) => { e.preventDefault(); game.setRepairing(false); };
 repairBtn.addEventListener('pointerdown', repairOn);
@@ -246,18 +321,18 @@ function closeSettings() {
   modal.dataset.on = 'false';
   game.paused = false;
 }
-$('btn-settings').addEventListener('click', openSettings);
+$('btn-boat-settings').addEventListener('click', openSettings);
+$('btn-menu-settings').addEventListener('click', openSettings);
+$('btn-alert-settings').addEventListener('click', openSettings);
+// PLAY just dismisses the sheet. The design has no Quit here, and none is
+// needed on the surface — the blue underwater panel is the one that carries a
+// Home button, for abandoning a dive.
 $('btn-resume').addEventListener('click', closeSettings);
-$('btn-quit').addEventListener('click', () => {
-  closeSettings();
-  if (screen === 'boat' || screen === 'dive') {
-    game.state.outcome = null;
-    game._end('loss', 'You abandoned the boat.');
-  } else {
-    showMenu();
-  }
-});
+modal.querySelector('.scrim').addEventListener('click', closeSettings);
 
+// Knob right is on, which is the near-universal reading. The delivered artwork
+// draws the knob on the left; that is one state of a two-state control, not a
+// statement about which way round it goes.
 const bindToggle = (id, apply) => {
   const el = $(id);
   el.addEventListener('click', () => {
@@ -269,90 +344,108 @@ const bindToggle = (id, apply) => {
 bindToggle('tg-music', (on) => audio.setMusic(on));
 bindToggle('tg-sfx', (on) => audio.setSfx(on));
 
-// Tilt has to be requested from inside the click on iOS, so it is wired
-// directly rather than through bindToggle.
-const tiltToggle = $('tg-tilt');
-const tiltNote = $('tilt-note');
+/* -------------------------------------------------- underwater settings */
+
+// The blue panel is the in-dive one. Its toggles drive the same two switches as
+// the surface panel, so opening either reflects the current state.
+const uwModal = $('modal-uw-settings');
+function openUwSettings() {
+  $('tg-uw-sfx').dataset.on = String(audio.sfxOn);
+  $('tg-uw-music').dataset.on = String(audio.musicOn);
+  uwModal.dataset.on = 'true';
+  game.paused = true;
+}
+function closeUwSettings() {
+  uwModal.dataset.on = 'false';
+  game.paused = false;
+  // Keep the surface panel in step, since both show the same two switches.
+  $('tg-sfx').dataset.on = String(audio.sfxOn);
+  $('tg-music').dataset.on = String(audio.musicOn);
+}
+$('btn-settings').addEventListener('click', openUwSettings);
+$('uw-play').addEventListener('click', closeUwSettings);
+uwModal.querySelector('.scrim').addEventListener('click', closeUwSettings);
+bindToggle('tg-uw-sfx', (on) => audio.setSfx(on));
+bindToggle('tg-uw-music', (on) => audio.setMusic(on));
+
+// Home abandons the dive. The run is over either way — the storm does not stop
+// for anyone — so it ends the run rather than silently discarding it.
+$('uw-home').addEventListener('click', () => {
+  closeUwSettings();
+  if (game.state && !game.state.outcome) game._end('loss', 'You surfaced and left the wreck.');
+});
+
 // The eye stick only exists to aim movement in free 3D. On the plane the move
 // stick already points where you are going, so it comes off the screen.
 if (CONFIG.play.planar) $('look-stick').style.display = 'none';
 
-function paintTilt() {
-  const on = tilt.enabled && !tilt.denied;
-  tiltToggle.dataset.on = String(on);
-  $('move-stick').style.display = on ? 'none' : '';
-  tiltNote.textContent = !tilt.available
-    ? 'No motion sensor on this device.'
-    : tilt.denied ? 'Motion access was declined — allow it in your browser settings.'
-    : on ? 'Hold the phone how you like; it re-centres on each dive.'
-    : "Uses the phone's motion sensor instead of the left stick.";
-}
-tiltToggle.addEventListener('click', async () => {
-  if (tilt.enabled) tilt.disable();
-  else await tilt.enable();
-  paintTilt();
-});
-paintTilt();
-
 /* ------------------------------------------------------------------- end */
 
-function showEnd(outcome, reason, s) {
-  showScreen('end');
+// Each ending has its own film and its own artwork. A cause with no clip —
+// winning, or quitting from the deck — goes straight to the scroll.
+const GAME_OVER = {
+  shark:  { clip: 'GameOverDueToSharkAttack.mp4',     icon: 'SHARK GO',       title: 'RUN OVER' },
+  oxygen: { clip: 'GameOverDueToOxygenDepletion.mp4', icon: '02 GO ICON',     title: 'GAME OVER' },
+  storm:  { clip: 'GameOverDueToStorm.mp4',           icon: 'STORM GO ICON',  title: 'GAME OVER' },
+  quit:   { clip: null,                               icon: 'STORM GO ICON',  title: 'GAME OVER' },
+  win:    { clip: null,                               icon: null,             title: 'YOU MADE IT' },
+};
+
+// Fades up, plays, fades out. A tap cuts it short — ten seconds in front of
+// every retry would wear thin, and the scroll behind it is the real payload.
+function playClip(file) {
+  return new Promise((resolve) => {
+    const scr = $('screen-clip');
+    const v = $('clip-video');
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      v.removeEventListener('ended', finish);
+      v.removeEventListener('error', finish);
+      scr.removeEventListener('pointerdown', finish);
+      scr.dataset.fade = 'out';
+      setTimeout(() => { v.pause(); resolve(); }, 460);
+    };
+    v.addEventListener('ended', finish);
+    v.addEventListener('error', finish);
+    scr.addEventListener('pointerdown', finish);
+
+    scr.dataset.fade = 'out';
+    showScreen('clip');
+    v.setAttribute('src', video(file));
+    try { v.currentTime = 0; } catch { /* not seekable yet */ }
+    requestAnimationFrame(() => { scr.dataset.fade = 'in'; });
+    v.muted = false;
+    v.play().catch(() => { v.muted = true; v.play().catch(finish); });
+  });
+}
+
+const mmss = (secs) => `${String(Math.floor(secs / 60)).padStart(2, '0')}:`
+  + String(Math.floor(secs % 60)).padStart(2, '0');
+
+async function showEnd(outcome, reason, s) {
+  const spec = GAME_OVER[s.cause] ?? GAME_OVER.quit;
+  progress = saveResult(currentLevel.id, outcome, s.score);
+
   const el = $('screen-end');
   el.dataset.outcome = outcome;
-  $('end-eyebrow').textContent = outcome === 'win'
-    ? `Off to shore — ${currentLevel.name}` : `Run over — ${currentLevel.name}`;
-  $('end-title').textContent = outcome === 'win' ? 'YOU MADE IT' : 'RUN OVER';
+  $('end-title').textContent = outcome === 'win' ? GAME_OVER.win.title : spec.title;
   $('end-reason').textContent = reason;
 
-  const rows = [
-    [{ salvage: 'Parts fitted', beacon: 'Beacons planted', haul: 'Crates delivered' }[game.objective],
-      `${game.goalDone}/${game.partsTotal}`, s.breakdown.parts],
-    ['Close calls', `${s.closeCalls}`, s.breakdown.closeCalls],
-    ['Time to spare', outcome === 'win' ? `${Math.round(s.timeLeft)}s` : '—', s.breakdown.escape],
-  ];
-  // Parts still in hand went down with the diver. Say so, rather than leaving the
-  // player to wonder why the three they recovered scored nothing.
-  if (s.carrying.length && game.objective !== 'beacon') {
-    rows.push(['Lost with the diver', `${s.carrying.length}`, 0]);
-  }
-  if (s.breakdown.training) {
-    rows.push(['Training objective', s.training.skill, s.breakdown.training]);
-  }
-  $('end-breakdown').innerHTML = rows.map(([label, detail, value]) =>
-    `<li><span>${label} · ${detail}</span><b>${value.toLocaleString()}</b></li>`
-  ).join('') + `<li class="total"><span>Score</span><b>${s.score.toLocaleString()}</b></li>`;
+  const icon = $('end-icon');
+  const art = outcome === 'win' ? null : spec.icon;
+  icon.style.display = art ? '' : 'none';
+  if (art) icon.src = resolve(art, 4);
 
-  progress = saveResult(currentLevel.id, outcome, s.score);
-  // Training debrief: what the dive was meant to teach, and what the run
-  // actually measured.
-  const t = s.training;
-  const box = $('end-training');
-  if (t) {
-    const fmt = {
-      minAir: (v) => [`Lowest tank <b>${v}%</b>`, `target ${t.target}%`],
-      dives: (v) => [`<b>${v}</b> dive${v === 1 ? '' : 's'}`, `target ${t.target} or fewer`],
-      contacts: (v) => [`<b>${v}</b> contact${v === 1 ? '' : 's'}`, `target ${t.target}`],
-      sweptPct: (v) => [`<b>${v}%</b> of the site swept`, `target ${t.target}%`],
-      lights: (v) => [`<b>${v}</b> floodlight${v === 1 ? '' : 's'}`, `target ${t.target}`],
-      timeLeft: (v) => [`<b>${v}s</b> to spare`, `target ${t.target}s`],
-    }[t.metric] ?? ((v) => [`<b>${v}</b>`, `target ${t.target}`]);
-    const [got, aim] = fmt(t.value);
-    box.dataset.met = String(t.met);
-    box.innerHTML = `
-      <div class="lab">Training objective</div>
-      <div class="skill">${t.skill}</div>
-      <div class="brief">${t.brief}</div>
-      <div class="result"><span>${got} &middot; ${aim}</span>
-        <span class="verdict">${t.met ? 'MET' : 'NOT MET'}</span></div>`;
-    box.style.display = '';
-  } else {
-    box.style.display = 'none';
-  }
+  // What the design reports: how deep, how much recovered, how long survived.
+  $('end-depth').textContent = `${Math.round(s.maxDepth)} m`;
+  $('end-parts').textContent = `${game.objective === 'salvage' ? s.found.size : game.goalDone}`
+    + `/${game.partsTotal}`;
+  $('end-time').textContent = mmss(CONFIG.run.stormSeconds - Math.max(0, s.timeLeft));
 
-  const best = progress.best[currentLevel.id] ?? s.score;
-  $('end-best').textContent = `${currentLevel.name} — best ${best.toLocaleString()}`;
-  $('btn-again').textContent = outcome === 'win' ? 'Dive Again' : 'Retry';
+  if (spec.clip) await playClip(spec.clip);
+  showScreen('end');
 }
 
 $('btn-again').addEventListener('click', () => startLevel(currentLevel));
@@ -365,8 +458,7 @@ function frame(now) {
   const dt = Math.min(0.05, (now - last) / 1000);
   last = now;
 
-  if (screen === 'landing') tickLoading(dt);
-  if (screen === 'boat' || screen === 'dive') {
+  if (screen === 'boat' || screen === 'deck' || screen === 'dive') {
     game.update(dt);
     if (game.state) { hud.update(game); minimap.draw(game); }
   }

@@ -50,8 +50,10 @@
     position: fixed; inset: 0; display: none;
     padding: calc(var(--safe-t) + 14px) 16px calc(var(--safe-b) + 18px);
   }
-  /* Interactive layers are capped and centred; the 3D canvas stays full-bleed. */
-  #hud, #screen-dive, #screen-boat {
+  /* Control layers are capped and centred so they stay thumb-width on a big
+     screen. Painted screens are deliberately not capped — they are full-bleed
+     art and crop themselves with object-fit. */
+  #hud, #screen-dive {
     left: 50%; right: auto; transform: translateX(-50%);
     width: 100%; max-width: var(--ui-max);
   }
@@ -59,83 +61,149 @@
   .screen[data-on="true"] { display: block; }
   .screen.solid { background: var(--abyss); }
 
-  /* ---------- shared chips ---------- */
-  .chip {
-    position: absolute; pointer-events: auto;
-    display: grid; place-items: center; text-align: center;
-    background: var(--chip); border: 1px solid var(--stroke);
-    backdrop-filter: blur(6px);
-    border-radius: 999px;
-  }
-  .chip-round { width: 52px; height: 52px; }
-  .chip-label { font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
-
-  #btn-settings { top: calc(var(--safe-t) + 14px); left: 16px; }
-  #btn-settings svg { width: 20px; height: 20px; }
-
-  #hud-timer {
-    top: calc(var(--safe-t) + 14px); right: 16px;
-    width: 74px; height: 52px; border-radius: 26px;
-  }
-  #timer-value { font-size: 19px; font-weight: 650; letter-spacing: -0.01em; line-height: 1; }
-  #hud-timer[data-late="true"] #timer-value { color: var(--signal); }
-  #hud-timer[data-late="critical"] #timer-value { color: var(--danger); animation: throb 1s infinite; }
   @keyframes throb { 50% { opacity: 0.4; } }
 
-  /* ---------- checklist ---------- */
-  #checklist { position: absolute; top: calc(var(--safe-t) + 76px); right: 16px; width: 74px; }
-  #btn-checklist {
-    position: relative; width: 74px; height: 44px; border-radius: 22px;
-    display: grid; place-items: center; pointer-events: auto;
-    background: var(--chip); border: 1px solid var(--stroke);
+  /* ---------- underwater HUD ----------
+     A single top row — gear, boat progress, storm clock — with the checklist
+     bubble under the clock. The 3D scene renders behind all of it. */
+  .uw-gear {
+    position: absolute; top: calc(var(--safe-t) + 16px); left: 5.5%;
+    width: 10%; max-width: 46px; pointer-events: auto; line-height: 0;
   }
-  #checklist-count { font-size: 15px; font-weight: 650; line-height: 1; }
-  #checklist-count .cl-total { color: var(--muted); font-weight: 500; }
-  #cl-carry { color: var(--signal); font-size: 11px; font-weight: 650; }
-  #checklist-items { margin-top: 8px; display: none; flex-direction: column; gap: 6px; }
-  #checklist[data-open="true"] #checklist-items { display: flex; }
-  .cl-item {
-    display: flex; align-items: center; gap: 6px;
-    padding: 7px 8px; border-radius: 12px;
-    background: var(--chip); border: 1px solid var(--stroke);
-    font-size: 9.5px; letter-spacing: 0.02em; line-height: 1.1;
-  }
-  .cl-item .cl-glyph { font-size: 11px; width: 12px; text-align: center; opacity: 0.5; }
-  .cl-item[data-state="unknown"]   { color: var(--muted); opacity: 0.62; }
-  .cl-item[data-state="carried"]   { color: var(--signal); border-color: rgba(255,179,64,0.5); }
-  .cl-item[data-state="installed"] { color: var(--ok); border-color: rgba(53,214,196,0.45); }
-  .cl-item[data-state="installed"] .cl-glyph { opacity: 1; }
+  .uw-gear img { width: 100%; height: auto; display: block;
+                 filter: drop-shadow(0 2px 5px rgba(4,50,90,0.4)); }
 
-  /* ---------- minimap ---------- */
-  #minimap-wrap {
-    position: absolute; top: calc(var(--safe-t) + 76px); left: 16px;
-    width: 108px; pointer-events: none;
+  .uw-prog { position: absolute; top: calc(var(--safe-t) + 24px); left: 20%; right: 26.5%; }
+  .uw-prog img { width: 100%; height: auto; display: block; }
+  /* The artwork's navy cap at the left end is the empty state; the fill grows
+     out of it rather than sitting on top of it. */
+  #ship-fill {
+    position: absolute; left: 0.3%; top: 3%; height: 94%; width: 6.2%;
+    min-width: 6.2%; max-width: 99.4%;
+    border-radius: 999px;
+    background: linear-gradient(180deg, #3c4a72 0%, #26304f 100%);
+    transition: width 0.35s ease;
   }
-  #minimap {
-    display: block; width: 100%; height: 100px;
-    border-radius: 10px; border: 1px solid var(--stroke);
-    background: rgba(4,20,28,0.8); backdrop-filter: blur(6px);
-  }
-  #minimap-wrap .cap {
-    margin-top: 5px; font-size: 8.5px; letter-spacing: 0.14em;
-    text-transform: uppercase; color: var(--muted);
-    display: flex; justify-content: space-between; align-items: baseline;
-  }
-  #minimap-wrap .cap b { color: var(--foam); font-size: 11px; letter-spacing: 0.04em; }
 
-  /* ---------- ship progress ---------- */
-  #ship-progress {
-    position: absolute; top: calc(var(--safe-t) + 26px); left: 80px; right: 104px;
-    height: 28px; display: grid; align-content: center; gap: 5px;
+  /* No font ships with the build, so the clock is set in the heaviest system
+     face with the artwork's navy outline rebuilt as a stroke. */
+  .uw-timer {
+    position: absolute; top: calc(var(--safe-t) + 14px); right: 4.5%;
+    font-family: 'Arial Black', Impact, var(--ui);
+    font-size: clamp(20px, 6.4vw, 34px); font-weight: 900; letter-spacing: 0.01em;
+    color: #ffffff; -webkit-text-stroke: 3px #123a63; paint-order: stroke fill;
+    text-shadow: 0 2px 4px rgba(4,40,80,0.45);
   }
-  #ship-progress .cap {
-    font-size: 8.5px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted);
-  }
-  #ship-track { height: 6px; border-radius: 3px; background: rgba(127,212,217,0.16); overflow: hidden; }
-  #ship-fill { height: 100%; width: 0%; background: var(--ok); border-radius: 3px; transition: width 0.35s ease; }
+  .uw-timer[data-late="true"]     { color: #ffd15c; }
+  .uw-timer[data-late="critical"] { color: #ff6b76; animation: throb 1s infinite; }
 
-  /* ---------- boat screen ---------- */
-  #screen-boat .stage-frame {
+  /* ---------- underwater checklist ---------- */
+  #uw-list-wrap { position: absolute; top: calc(var(--safe-t) + 78px); right: 4.5%; width: 14%; max-width: 62px; }
+  .uw-listbtn { position: relative; z-index: 3; width: 100%; pointer-events: auto; line-height: 0; display: block; }
+  .uw-listbtn img { width: 100%; height: auto; display: block;
+                    filter: drop-shadow(0 3px 7px rgba(4,50,90,0.4)); }
+  #uw-pill {
+    position: absolute; left: 6%; right: 6%; top: 60%;
+    /* The pill's head starts 60% of the way down the bubble button, and the top
+       padding carries the first circle clear of the remaining 40%. */
+    z-index: 2; display: none; padding: 48% 0 12%;
+    border-radius: 999px; border: 2px solid rgba(255,255,255,0.9);
+    background: linear-gradient(180deg, #cdeeff 0%, #7fd2fb 42%, #4bb4f0 100%);
+    box-shadow: 0 6px 16px rgba(4,50,90,0.32);
+  }
+  /* The ring is a border, not a box-shadow: a shadow ring is drawn outside the
+     box and takes no space, so neighbouring rings ate the gap and collided.
+     Percentage margins resolve against the pill's width, which is a real number
+     here — a percentage row-gap would resolve against its auto height, i.e. 0. */
+  .uw-slot {
+    position: relative; display: block; width: 54%; margin: 0 auto 12%;
+    aspect-ratio: 1; border-radius: 50%;
+    background: #ffffff; border: 3px solid #ffffff;
+    box-shadow: 0 1px 3px rgba(4,50,90,0.28);
+    transition: border-color 0.25s ease;
+  }
+  .uw-slot:last-child { margin-bottom: 0; }
+  .uw-slot img { position: absolute; inset: 11%; width: 78%; height: 78%; object-fit: contain; }
+  /* Not yet found: drained. Found: full colour. Fitted: the ring turns green.
+     A slot this dive does not use keeps its ring and drops the icon, so the
+     pill is the same length every run. */
+  .uw-slot[data-state="unknown"] img { filter: grayscale(1) opacity(0.4); }
+  .uw-slot[data-state="installed"] { border-color: #3fd15c; }
+  .uw-slot[data-state="empty"] img { display: none; }
+
+  #uw-pill[data-on="true"] { display: block; animation: pillOpen 320ms cubic-bezier(0.2,1.15,0.35,1) both; }
+  #uw-pill[data-on="closing"] { display: block; animation: pillClose 190ms ease-in both; }
+  /* Its own keyframes, not the beige pill's: those centre an absolutely
+     positioned slot with translate(-50%,-50%), and these slots sit in normal
+     flow. Borrowing them shunted every circle half its width to the left. */
+  #uw-pill[data-on="true"] .uw-slot {
+    animation: uwSlotPop 240ms cubic-bezier(0.2,1.5,0.4,1) both;
+    animation-delay: calc(110ms + var(--i) * 45ms);
+  }
+  @keyframes uwSlotPop {
+    from { opacity: 0; transform: scale(0.35); }
+    to   { opacity: 1; transform: scale(1); }
+  }
+  /* Reduced motion: no stagger either — waiting a third of a second for the
+     last item is exactly the delay the preference asks us to drop. */
+  @media (prefers-reduced-motion: reduce) {
+    #uw-pill[data-on="true"], #uw-pill[data-on="closing"],
+    #uw-pill[data-on="true"] .uw-slot { animation-duration: 1ms; animation-delay: 0ms; }
+  }
+
+  /* ---------- oxygen badge ----------
+     Pinned to the diver's projected screen position each frame. */
+  #o2-badge { position: fixed; width: 34%; max-width: 150px; margin-left: 1.5%; display: none; }
+  #o2-badge[data-on="true"] { display: block; }
+  #o2-badge > img { width: 100%; height: auto; display: block;
+                    filter: drop-shadow(0 2px 5px rgba(4,50,90,0.35)); }
+  .o2-fill {
+    position: absolute; left: 28.27%; top: 30.72%; height: 40.52%; width: 63.03%;
+    background-size: 100% 100%; background-repeat: no-repeat;
+    transform-origin: left center;
+  }
+
+
+  /* ---------- underwater settings ----------
+     The blue panel ships fully composed, so it is used whole and only the two
+     toggles are overlaid: a blank track (which covers the painted knob) plus a
+     knob that slides. Home and Play get transparent hit areas over the artwork. */
+  #modal-uw-settings { position: fixed; inset: 0; display: none; z-index: 70; }
+  #modal-uw-settings[data-on="true"] { display: block; }
+  #modal-uw-settings .scrim { position: absolute; inset: 0; background: rgba(4,45,85,0.26); }
+  .uwp-panel {
+    position: absolute; left: 50%; top: 30%; transform: translateX(-50%);
+    width: 62%; max-width: 300px;
+  }
+  .uwp-bg { width: 100%; height: auto; display: block;
+            filter: drop-shadow(0 12px 26px rgba(4,45,85,0.4)); }
+  .uwp-toggle {
+    position: absolute; left: 48.7%; width: 36.7%;
+    transform: translateY(-50%); pointer-events: auto; line-height: 0;
+  }
+  .uwp-r1 { top: 35.4%; }
+  .uwp-r2 { top: 57.2%; }
+  .uwp-toggle img.tr { width: 100%; height: auto; display: block; transition: filter 0.18s ease; }
+  .uwp-toggle img.kn {
+    position: absolute; top: 50%; width: 34.16%; height: auto;
+    transform: translateY(-50%);
+    transition: left 0.2s cubic-bezier(0.3, 1.4, 0.5, 1);
+  }
+  .uwp-toggle[data-on="true"]  img.kn { left: 61.43%; }
+  .uwp-toggle[data-on="false"] img.kn { left: 4.41%; }
+  .uwp-toggle[data-on="false"] img.tr { filter: grayscale(0.6) brightness(0.9); }
+  .uwp-hit {
+    position: absolute; border-radius: 50%; background: none; pointer-events: auto;
+    transition: transform 0.08s ease;
+  }
+  .uwp-hit:active { transform: scale(0.92); }
+  #uw-home { left: 11.9%; top: 71.3%; width: 28.8%; height: 20.8%; }
+  #uw-play { left: 54.5%; top: 71.2%; width: 30.4%; height: 20.8%; }
+
+  /* ---------- deck (3D boat view) ----------
+     The original mid-run surfacing screen. The painted home screen is the
+     pre-dive one; this is what you come up onto during a run. */
+  #screen-deck .stage-frame {
     position: absolute; left: 16px; right: 16px; top: calc(var(--safe-t) + 132px); bottom: 132px;
     border-radius: 18px; pointer-events: none;
   }
@@ -155,11 +223,11 @@
   }
   .big-btn.primary { background: var(--ok); color: var(--abyss); border-color: transparent; }
   .big-btn:disabled { opacity: 0.35; }
-  #btn-repair .fill {
+  #btn-deck-repair .fill {
     position: absolute; inset: 0; width: var(--fill, 0%);
     background: rgba(255,179,64,0.4); pointer-events: none; transition: width 0.05s linear;
   }
-  #btn-repair span { position: relative; }
+  #btn-deck-repair span { position: relative; }
 
   /* ---------- boat scouting ---------- */
   #boat-look { position: absolute; inset: 0; pointer-events: auto; touch-action: none; }
@@ -168,20 +236,20 @@
   /* Scouting is opt-in: the boat screen defaults to Dive / Repair, and the pan
      stick only appears when asked for. */
   #pan-stick { left: 16px; }
-  #screen-boat:not([data-scout="on"]) #pan-stick,
-  #screen-boat:not([data-scout="on"]) #btn-recentre { display: none; }
+  #screen-deck:not([data-scout="on"]) #pan-stick,
+  #screen-deck:not([data-scout="on"]) #btn-recentre { display: none; }
   #btn-scout {
     position: absolute; left: 16px; bottom: calc(var(--safe-b) + 92px);
     height: 40px; padding: 0 14px; border-radius: 12px; pointer-events: auto;
     background: var(--chip); border: 1px solid var(--stroke); color: var(--muted);
     font-size: 10px; font-weight: 650; letter-spacing: 0.12em; text-transform: uppercase;
   }
-  #screen-boat[data-scout="on"] #btn-scout {
+  #screen-deck[data-scout="on"] #btn-scout {
     background: rgba(53,214,196,0.18); border-color: rgba(53,214,196,0.5); color: var(--ok);
     bottom: calc(var(--safe-b) + 190px);
   }
-  #screen-boat[data-scout="on"] #boat-status { bottom: calc(var(--safe-b) + 244px); }
-  #screen-boat[data-scout="on"] #scout-hint { bottom: calc(var(--safe-b) + 278px); }
+  #screen-deck[data-scout="on"] #boat-status { bottom: calc(var(--safe-b) + 244px); }
+  #screen-deck[data-scout="on"] #scout-hint { bottom: calc(var(--safe-b) + 278px); }
   #btn-recentre {
     position: absolute; left: 116px; bottom: calc(var(--safe-b) + 112px);
     width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center;
@@ -254,28 +322,108 @@
   }
   #toast[data-on="true"] { opacity: 1; transform: translateX(-50%) translateY(6px); }
 
-  /* ---------- landing ---------- */
-  #screen-landing { display: none; place-content: center; text-align: center; }
-  #screen-landing[data-on="true"] { display: grid; }
-  .wordmark { font-size: 44px; font-weight: 750; letter-spacing: -0.02em; line-height: 0.95; }
-  .wordmark em { display: block; font-style: normal; color: var(--foam); }
-  .sub { margin-top: 10px; font-size: 11px; letter-spacing: 0.24em; text-transform: uppercase; color: var(--muted); }
-  #load-track { margin: 34px auto 0; width: 220px; height: 34px; border-radius: 10px; border: 1px solid var(--stroke); position: relative; overflow: hidden; display: grid; place-items: center; }
-  #load-fill { position: absolute; inset: 0; width: 0%; background: rgba(53,214,196,0.28); transition: width 0.2s linear; }
-  #load-track span { position: relative; font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; }
+  /* ---------- landing / loading ----------
+     A composed seabed scene: the water gradient full-bleed, a sand shelf along
+     the bottom, and the coral / rock / chest sprites standing on it. The whole
+     screen is padding-free so the art reaches the bezel. */
+  #screen-landing { display: none; padding: 0; background: #1f7fd0; overflow: hidden; }
+  #screen-landing[data-on="true"] { display: block; }
 
-  /* ---------- menu ---------- */
-  #screen-menu { display: none; place-content: center; text-align: center; }
-  #screen-menu > div, #screen-landing > div, #screen-end > div { width: 100%; max-width: var(--ui-max); margin: 0 auto; }
-  #screen-menu[data-on="true"] { display: grid; }
-  .menu-actions { margin-top: 38px; display: grid; gap: 12px; justify-items: center; }
+  .ls-scene { position: absolute; inset: 0; overflow: hidden; }
+  #ls-water { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  /* The delivered water gradient darkens toward its foot; the design puts a lit
+     sand bed there instead, so one is laid over the other. */
+  .ls-seabed {
+    position: absolute; left: 0; right: 0; bottom: 0; height: 34%;
+    background:
+      radial-gradient(150% 85% at 50% 106%,
+        rgba(250,233,175,0.80) 0%, rgba(250,233,175,0.80) 55%, rgba(250,233,175,0) 100%),
+      linear-gradient(180deg,
+        rgba(236,216,160,0) 0%, rgba(236,216,160,0.20) 50%,
+        rgba(236,216,160,0.51) 70%, rgba(236,216,160,0.85) 85%, rgba(236,216,160,1) 100%);
+  }
+  .ls-flora { position: absolute; inset: 0; }
+  .ls-sprite { position: absolute; height: auto; display: block; }
+
+  .ls-content {
+    position: absolute; inset: 0; z-index: 10;
+    display: flex; flex-direction: column; align-items: center;
+    padding: 0 7%;
+  }
+  /* No webfont ships with the build, so the wordmark is set in the heaviest
+     system faces available and weighted toward the design's slab silhouette.
+     See the note in README: an exported title lockup would replace this. */
+  .ls-title {
+    position: absolute; top: 25%; left: 0; right: 0;
+    text-align: center; line-height: 0.98;
+    font-family: 'Arial Black', 'Helvetica Neue', Impact, var(--ui);
+    font-weight: 900; font-size: clamp(38px, 13.5vw, 74px);
+    letter-spacing: 0.02em; color: #1d3a55;
+    text-shadow: 0 2px 0 rgba(255,255,255,0.18), 0 -1px 0 rgba(10,28,46,0.5);
+  }
+  .ls-title span { display: block; }
+  .ls-title span + span { margin-top: 0.14em; }
+
+  #load-track {
+    position: absolute; top: 61.5%; left: 50%; transform: translateX(-50%);
+    width: 70%; aspect-ratio: 279 / 29;
+    background: url('./assets/derived/loading-bar-track.webp') center / 100% 100% no-repeat;
+  }
+  /* Placed against the inner track measured out of the source image, so the fill
+     sits inside the painted frame at any width. */
+  #load-fill {
+    position: absolute; left: 3.49%; top: 26.09%; height: 53.91%; width: 0%;
+    background: url('./assets/derived/loading-bar-fill.webp') left center / 100% 100% no-repeat;
+  }
+  #load-label {
+    position: absolute; top: 67.5%; left: 0; right: 0; text-align: center;
+    font-size: 12px; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase;
+    color: rgba(255,255,255,0.92); text-shadow: 0 1px 3px rgba(6,40,66,0.55);
+    opacity: 0.75;
+  }
+  #load-label[data-ready="true"] { opacity: 1; animation: throb 1.4s infinite; }
+
+  /* ---------- start screen ----------
+     The harbour scene full-bleed, the boat sprite on top of it, and two
+     controls: the gear, and START. */
+  #screen-menu { display: none; padding: 0; background: #4bb4e6; overflow: hidden; }
+  #screen-menu[data-on="true"] { display: block; }
+  /* (the end screen used to wrap its contents in a centred column; it is a
+     full-bleed painted screen now, so nothing here needs capping) */
+
+  .ss-scene { position: absolute; inset: 0; overflow: hidden; }
+  /* Anchored left so the crop keeps the lighthouse and drops the palms on the
+     far right, which is how the design frames it. */
+  #ss-bg {
+    position: absolute; inset: 0; width: 100%; height: 100%;
+    object-fit: cover; object-position: left center;
+  }
+  #ss-boat {
+    position: absolute; left: 50%; top: 41%; width: 92%; height: auto;
+    transform: translateX(-50%);
+    filter: drop-shadow(0 10px 16px rgba(4,60,95,0.28));
+  }
+  .ss-gear {
+    position: absolute; top: calc(var(--safe-t) + 22px); left: 6%;
+    width: 9%; max-width: 46px; pointer-events: auto; line-height: 0;
+  }
+  .ss-start {
+    position: absolute; left: 50%; top: 68.5%; width: 46%;
+    transform: translateX(-50%); pointer-events: auto; line-height: 0;
+    transition: transform 0.08s ease;
+  }
+  .ss-start:active { transform: translateX(-50%) scale(0.955); }
+  .ss-gear img, .ss-start img { width: 100%; height: auto; display: block; }
+  .ss-gear img { filter: drop-shadow(0 2px 5px rgba(6,45,70,0.45)); }
+  .ss-start img { filter: drop-shadow(0 5px 10px rgba(6,45,70,0.32)); }
+
+  /* still used by the level-select and end screens */
   .menu-btn {
     width: 240px; height: 56px; border-radius: 16px;
     font-size: 13px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase;
     border: 1px solid var(--stroke); background: var(--chip); color: var(--ink);
   }
   .menu-btn.primary { background: var(--ok); color: var(--abyss); border-color: transparent; }
-  #menu-note { margin-top: 22px; font-size: 11px; letter-spacing: 0.1em; color: var(--muted); }
 
   /* ---------- level select ---------- */
   #screen-levels { display: none; overflow-y: auto; touch-action: pan-y; -webkit-overflow-scrolling: touch; }
@@ -328,111 +476,288 @@
   .lvl[data-cleared="true"] { border-color: rgba(53,214,196,0.4); background: rgba(53,214,196,0.06); }
   .lvl[data-cleared="true"] .idx { color: var(--ok); }
 
-  /* ---------- ftux ---------- */
-  #screen-ftux { display: none; }
-  #screen-ftux[data-on="true"] { display: block; }
-  #ftux-card {
-    position: absolute; left: 20px; right: 20px; top: calc(var(--safe-t) + 60px);
-    background: var(--chip); border: 1px solid var(--stroke); border-radius: 16px; padding: 20px;
+  /* ---------- intro video ----------
+     The clip is 16:9 landscape against a portrait screen, so it is letterboxed
+     rather than cropped — cover would throw away most of each frame. */
+  #screen-intro { display: none; padding: 0; background: #07304f; }
+  #screen-intro[data-on="true"] { display: block; }
+  #intro-video {
+    position: absolute; inset: 0; width: 100%; height: 100%;
+    object-fit: contain; background: #07304f;
   }
-  #ftux-card p { font-size: 16px; line-height: 1.5; font-weight: 550; }
-  #ftux-card p + p { margin-top: 10px; color: var(--foam); font-size: 13px; font-weight: 450; }
-  #btn-skip {
-    position: absolute; right: 20px; bottom: calc(var(--safe-b) + 24px);
-    padding: 13px 26px; border-radius: 999px; background: var(--ok); color: var(--abyss);
-    font-size: 12px; font-weight: 650; letter-spacing: 0.12em; text-transform: uppercase;
+  #btn-intro-skip {
+    position: absolute; right: 18px; bottom: calc(var(--safe-b) + 26px);
+    padding: 11px 22px; border-radius: 999px;
+    background: rgba(4,26,44,0.6); border: 1px solid rgba(255,255,255,0.35); color: #fff;
+    font-size: 11px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase;
+    backdrop-filter: blur(4px);
   }
-  #ftux-beats {
-    position: absolute; left: 20px; right: 20px; top: 50%; transform: translateY(-40%);
-    display: flex; flex-direction: column; gap: 14px;
-  }
-  .beat { display: flex; gap: 12px; align-items: center; opacity: 0; transform: translateY(8px); transition: opacity 0.4s, transform 0.4s; }
-  .beat[data-on="true"] { opacity: 1; transform: none; }
-  .beat i { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; font-style: normal; background: rgba(127,212,217,0.14); border: 1px solid var(--stroke); font-size: 15px; }
-  .beat span { font-size: 13px; color: var(--muted); }
 
-  /* ---------- modals ---------- */
-  .modal { position: fixed; inset: 0; display: none; place-items: center; padding: 24px; background: rgba(4,20,28,0.86); }
-  .modal[data-on="true"] { display: grid; }
-  .sheet {
-    width: 100%; max-width: 320px; background: var(--deep);
-    border: 1px solid var(--stroke); border-radius: 20px; padding: 22px;
+  /* ---------- harbour scene ----------
+     Shared by the briefing and the home screen: same painted backdrop, same
+     three chrome buttons, different content on top. */
+  #screen-alert, #screen-boat { display: none; padding: 0; background: #4bb4e6; overflow: hidden; }
+  #screen-alert[data-on="true"], #screen-boat[data-on="true"] { display: block; }
+  .hs-bg {
+    position: absolute; inset: 0; width: 100%; height: 100%;
+    object-fit: cover; object-position: center;
   }
-  .sheet h2 { font-size: 13px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); font-weight: 600; margin-bottom: 18px; }
-  .row { display: flex; align-items: center; justify-content: space-between; padding: 12px 0; }
-  .row + .row { border-top: 1px solid rgba(127,212,217,0.12); }
-  .row .name { display: flex; align-items: center; gap: 11px; font-size: 14px; }
-  .row .name i { font-style: normal; width: 22px; display: grid; place-items: center; color: var(--foam); }
-  .row-note { font-size: 10px; color: var(--muted); line-height: 1.5; padding: 2px 0 0; }
-  .toggle { width: 50px; height: 30px; border-radius: 999px; background: rgba(127,212,217,0.18); position: relative; transition: background 0.15s; }
-  .toggle::after { content: ""; position: absolute; top: 3px; left: 3px; width: 24px; height: 24px; border-radius: 50%; background: var(--ink); transition: transform 0.15s; }
-  .toggle[data-on="true"] { background: var(--ok); }
-  .toggle[data-on="true"]::after { transform: translateX(20px); }
-  .sheet-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 20px; }
-  .sheet-actions button { height: 46px; border-radius: 13px; font-size: 12px; font-weight: 650; letter-spacing: 0.1em; text-transform: uppercase; border: 1px solid var(--stroke); }
-  #btn-resume { background: var(--ok); color: var(--abyss); border-color: transparent; }
-  #btn-quit { color: var(--danger); border-color: rgba(255,77,94,0.4); }
+  .hs-gear {
+    position: absolute; top: calc(var(--safe-t) + 22px); left: 6%;
+    width: 9%; max-width: 46px; pointer-events: auto; line-height: 0;
+  }
+  .hs-icon { position: absolute; right: 5%; width: 11%; max-width: 56px; pointer-events: auto; line-height: 0; z-index: 3; }
+  .hs-help { top: calc(var(--safe-t) + 18px); }
+  .hs-list { top: calc(var(--safe-t) + 74px); }
+  .hs-gear img, .hs-icon img {
+    width: 100%; height: auto; display: block;
+    filter: drop-shadow(0 2px 5px rgba(6,45,70,0.42));
+  }
 
-  /* ---------- end screens ---------- */
-  #screen-end { display: none; place-content: center; text-align: center; background: var(--abyss); }
-  #screen-end[data-outcome="win"] {
-    background: linear-gradient(180deg, rgba(4,20,28,0) 0%, rgba(4,20,28,0) 26%, rgba(4,20,28,0.9) 42%, rgba(4,20,28,0.97) 100%);
-    place-content: end center;
-    padding-bottom: calc(var(--safe-b) + 48px);
+  /* ---------- checklist pill ----------
+     Centred on the checklist button (button centre sits 10.5% in from the right,
+     so the wider pill is inset less) and painted beneath it, so it unrolls from
+     behind the button rather than appearing beside it. */
+  .cl-pill {
+    position: absolute; right: 4.75%; top: calc(var(--safe-t) + 92px);
+    width: 11.5%; max-width: 58px; z-index: 2; display: none;
   }
-  #screen-end[data-on="true"] { display: grid; }
-  #end-eyebrow { font-size: 10px; letter-spacing: 0.24em; text-transform: uppercase; color: var(--muted); }
-  #end-title { font-size: 34px; font-weight: 750; letter-spacing: -0.02em; margin-top: 8px; }
-  #screen-end[data-outcome="win"] #end-title { color: var(--ok); }
-  #screen-end[data-outcome="loss"] #end-title { color: var(--danger); }
-  #end-reason { margin-top: 8px; font-size: 13px; color: var(--muted); }
-  #end-breakdown { list-style: none; margin: 26px auto 0; width: 100%; max-width: 290px; }
-  #end-breakdown li { display: grid; grid-template-columns: 1fr auto; gap: 12px; padding: 9px 0; font-size: 12.5px; border-bottom: 1px solid rgba(127,212,217,0.12); }
-  #end-breakdown li span { color: var(--muted); text-align: left; }
-  #end-breakdown li b { font-weight: 650; }
-  #end-breakdown li.total { border-bottom: none; padding-top: 14px; font-size: 17px; }
-  #end-breakdown li.total span, #end-breakdown li.total b { color: var(--ok); }
-  #end-training {
-    margin: 20px auto 0; max-width: 300px; text-align: left;
-    border: 1px solid var(--stroke); border-radius: 14px; padding: 13px 14px;
-    background: rgba(7,36,48,0.5);
+  .cl-pill-bg { width: 100%; height: auto; display: block;
+                filter: drop-shadow(0 4px 10px rgba(6,45,70,0.35)); }
+  .cl-slot {
+    position: absolute; left: 50%; top: var(--y);
+    transform: translate(-50%, -50%); width: 62%; line-height: 0;
   }
-  #end-training[data-met="true"] { border-color: rgba(53,214,196,0.45); background: rgba(53,214,196,0.07); }
-  #end-training .lab { font-size: 8.5px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); }
-  #end-training .skill { font-size: 14px; font-weight: 650; margin-top: 5px; }
-  #end-training .brief { font-size: 11px; color: var(--muted); margin-top: 4px; line-height: 1.45; }
-  #end-training .result { font-size: 11px; margin-top: 9px; display: flex; justify-content: space-between; gap: 10px; }
-  #end-training .result b { font-weight: 650; }
-  #end-training[data-met="true"] .verdict { color: var(--ok); }
-  #end-training[data-met="false"] .verdict { color: var(--muted); }
-  #end-best { margin-top: 12px; font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
-  #btn-again { margin: 26px auto 0; padding: 16px 40px; border-radius: 999px; background: var(--ok); color: var(--abyss); font-size: 13px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; }
+  .cl-slot img { width: 100%; height: auto; display: block; }
+  /* Not yet recovered: drained of colour rather than hidden, so the player can
+     see what they are still hunting for. */
+  .cl-slot[data-state="unknown"] { filter: grayscale(0.85) brightness(1.05) opacity(0.55); }
+  .cl-slot[data-state="carried"] { filter: drop-shadow(0 0 5px rgba(255,179,64,0.95)); }
+  .cl-slot[hidden] { display: none; }
+
+  .cl-pill[data-on="true"] {
+    display: block;
+    animation: pillOpen 320ms cubic-bezier(0.2, 1.15, 0.35, 1) both;
+  }
+  .cl-pill[data-on="closing"] {
+    display: block;
+    animation: pillClose 190ms ease-in both;
+  }
+  /* Revealed with clip-path rather than scaleY so the circles keep their shape
+     on the way down. */
+  @keyframes pillOpen {
+    from { clip-path: inset(0 0 100% 0); opacity: 0; transform: translateY(-5px); }
+    to   { clip-path: inset(0 0 0 0);    opacity: 1; transform: none; }
+  }
+  @keyframes pillClose {
+    from { clip-path: inset(0 0 0 0);    opacity: 1; }
+    to   { clip-path: inset(0 0 100% 0); opacity: 0; }
+  }
+  .cl-pill[data-on="true"] .cl-slot {
+    animation: slotPop 240ms cubic-bezier(0.2, 1.5, 0.4, 1) both;
+    animation-delay: calc(110ms + var(--i) * 45ms);
+  }
+  @keyframes slotPop {
+    from { opacity: 0; transform: translate(-50%, -50%) scale(0.35); }
+    to   { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .cl-pill[data-on="true"], .cl-pill[data-on="closing"],
+    .cl-pill[data-on="true"] .cl-slot { animation-duration: 1ms; animation-delay: 0ms; }
+  }
+
+  /* home screen actions: DIVE alone, as designed. Repair is not here — the
+     home screen is pre-dive, and fitting happens on the deck you surface onto. */
+  .hs-actions {
+    position: absolute; left: 0; right: 0; top: 68.5%;
+    display: flex; justify-content: center; gap: 4%; pointer-events: none;
+  }
+  .hs-btn {
+    position: relative; width: 45%; max-width: 232px;
+    pointer-events: auto; line-height: 0; transition: transform 0.08s ease;
+  }
+  .hs-btn:active { transform: scale(0.96); }
+  .hs-btn img { width: 100%; height: auto; display: block;
+                filter: drop-shadow(0 5px 10px rgba(6,45,70,0.32)); }
+
+  .al-popup { position: absolute; left: 7%; right: 7%; top: 13.5%; }
+  .al-popup > img { width: 100%; height: auto; display: block;
+                    filter: drop-shadow(0 8px 18px rgba(4,40,70,0.35)); }
+  .al-ok {
+    position: absolute; right: 6%; top: calc(100% + 6px); width: 17%;
+    pointer-events: auto; line-height: 0; transition: transform 0.08s ease;
+  }
+  .al-ok:active { transform: scale(0.94); }
+  .al-ok img { width: 100%; height: auto; display: block;
+               filter: drop-shadow(0 3px 7px rgba(4,40,70,0.4)); }
+
+  /* ---------- how-to-play ----------
+     The whole scroll ships as one image, close button included, so the only
+     thing built here is a hit area over the painted X. Measured off the
+     artwork: the disc sits at 83.9%/2.7%, 13.6% wide. */
+  #modal-help { position: fixed; inset: 0; display: none; z-index: 60; }
+  #modal-help[data-on="true"] { display: block; }
+  #modal-help .scrim { position: absolute; inset: 0; background: rgba(4,40,70,0.18); }
+  .hp-wrap {
+    position: absolute; left: 50%; top: 19.5%; transform: translateX(-50%);
+    width: 84%; max-width: 430px;
+  }
+  .hp-wrap > img {
+    width: 100%; height: auto; display: block;
+    filter: drop-shadow(0 12px 26px rgba(4,40,70,0.32));
+  }
+  #btn-help-close {
+    position: absolute; left: 82.5%; top: 1.5%; width: 16.5%; height: 11.5%;
+    border-radius: 50%; background: none;
+  }
+  #btn-help-close:active { transform: scale(0.92); }
+
+  /* ---------- settings ----------
+     Composed from the separate parts rather than the one flattened panel, so
+     the toggles can actually move: blank panel, keyed title, the two icon
+     buttons, a track with its knob lifted off it, and PLAY. */
+  #modal-settings { position: fixed; inset: 0; display: none; z-index: 70; }
+  #modal-settings[data-on="true"] { display: block; }
+  #modal-settings .scrim { position: absolute; inset: 0; background: rgba(4,40,70,0.28); }
+
+  .sp-panel {
+    position: absolute; left: 50%; top: 31.5%; transform: translateX(-50%);
+    width: 55%; max-width: 292px;
+  }
+  .sp-bg { width: 100%; height: auto; display: block;
+           filter: drop-shadow(0 12px 26px rgba(4,40,70,0.38)); }
+  .sp-title { position: absolute; left: 22.5%; top: 6.6%; width: 55%; height: auto; }
+
+  .sp-r1 { top: 38.6%; }
+  .sp-r2 { top: 64.4%; }
+  .sp-icon {
+    position: absolute; left: 23.5%; width: 17.6%; height: auto;
+    transform: translateY(-50%);
+  }
+  .sp-toggle {
+    position: absolute; left: 48.2%; width: 40%;
+    transform: translateY(-50%); pointer-events: auto; line-height: 0;
+  }
+  .sp-track { width: 100%; height: auto; display: block; transition: filter 0.18s ease; }
+  /* knob geometry taken from the source toggle: 38.37% of the track's width,
+     resting 2.33% in from either end. */
+  .sp-knob {
+    position: absolute; top: 50%; width: 38.37%; height: auto;
+    transform: translateY(-50%);
+    transition: left 0.2s cubic-bezier(0.3, 1.4, 0.5, 1);
+  }
+  .sp-toggle[data-on="true"]  .sp-knob { left: 59.3%; }
+  .sp-toggle[data-on="false"] .sp-knob { left: 2.33%; }
+  .sp-toggle[data-on="false"] .sp-track { filter: grayscale(0.72) brightness(0.86); }
+
+  .sp-play {
+    position: absolute; left: 25.3%; top: 92.1%; width: 49.4%;
+    transform: translateY(-50%); pointer-events: auto; line-height: 0;
+    transition: transform 0.08s ease;
+  }
+  .sp-play:active { transform: translateY(-50%) scale(0.95); }
+  .sp-play img { width: 100%; height: auto; display: block;
+                 filter: drop-shadow(0 4px 9px rgba(4,40,70,0.35)); }
+
+  /* ---------- game over / end ----------
+     One blank scroll, derived from the shark screen with its content painted
+     out, and everything on it placed as a percentage of that image: the cause
+     icon, the two lines of copy, the stats card, and RETRY. Positions are taken
+     from the composed artwork. */
+  #screen-end { display: none; padding: 0; background: #4bb4e6; overflow: hidden; }
+  #screen-end[data-on="true"] { display: block; }
+  #go-bg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+
+  #end-icon {
+    position: absolute; left: 50%; top: 25.2%; width: 19%;
+    height: auto; transform: translateX(-50%);
+    filter: drop-shadow(0 4px 8px rgba(60,40,20,0.28));
+  }
+  /* The display face is not one we ship, so the closest heavy system stack is
+     used with the artwork's white outline rebuilt as a stroke. */
+  #end-title {
+    position: absolute; left: 8%; right: 8%; top: 34.4%;
+    text-align: center; line-height: 1;
+    font-family: 'Arial Black', Impact, var(--ui);
+    font-size: clamp(26px, 9vw, 46px); font-weight: 900; letter-spacing: 0.01em;
+    color: #d92b1e; -webkit-text-stroke: 5px #ffffff; paint-order: stroke fill;
+  }
+  #end-reason {
+    position: absolute; left: 10%; right: 10%; top: 39.9%;
+    text-align: center; font-size: clamp(13px, 4.3vw, 19px); font-weight: 800;
+    color: #123a63; letter-spacing: -0.01em;
+  }
+
+  #end-card {
+    position: absolute; left: 26.5%; right: 21.5%; top: 45.3%;
+    background: rgba(222,235,236,0.94); border-radius: 18px;
+    padding: 3.5% 5% 1.5%;
+    box-shadow: 0 4px 14px rgba(60,45,25,0.18);
+  }
+  .go-row {
+    display: flex; align-items: baseline; justify-content: space-between; gap: 8px;
+    padding-bottom: 3%; margin-bottom: 13%;
+    border-bottom: 2px solid rgba(140,190,215,0.75);
+    font-size: clamp(10px, 3.4vw, 15px);
+  }
+  .go-row:last-child { margin-bottom: 5%; }
+  .go-row span { color: #3a86ac; font-weight: 600; }
+  .go-row b { color: #12496a; font-weight: 800; white-space: nowrap; }
+
+  #btn-again {
+    position: absolute; left: 33.6%; top: 66.8%; width: 38.5%;
+    pointer-events: auto; line-height: 0; transition: transform 0.08s ease;
+  }
+  #btn-again:active { transform: scale(0.95); }
+  #btn-again img { width: 100%; height: auto; display: block;
+                   filter: drop-shadow(0 4px 9px rgba(40,60,30,0.35)); }
+  #btn-end-levels {
+    position: absolute; left: 50%; bottom: calc(var(--safe-b) + 20px);
+    transform: translateX(-50%); width: 190px; height: 42px;
+  }
+
+  /* ---------- game-over film ----------
+     Fades up, plays, fades out, and only then is the scroll revealed. */
+  #screen-clip { display: none; padding: 0; background: #07304f; opacity: 0;
+                 transition: opacity 0.45s ease; }
+  #screen-clip[data-on="true"] { display: block; }
+  #screen-clip[data-fade="in"] { opacity: 1; }
+  #clip-video {
+    position: absolute; inset: 0; width: 100%; height: 100%;
+    object-fit: cover; background: #07304f;
+  }
+
 </style>
 </head>
 <body>
 <canvas id="game"></canvas>
 
-<!-- ============ LANDING ============ -->
-<section class="screen solid" id="screen-landing" data-on="true">
-  <div>
-    <h1 class="wordmark">DEPTH<em>RUSH</em></h1>
-    <div class="sub">Salvage before the storm</div>
-    <div id="load-track"><div id="load-fill"></div><span id="load-label">Loading</span></div>
+<!-- ============ LANDING / LOADING ============ -->
+<section class="screen" id="screen-landing" data-on="true">
+  <div class="ls-scene" aria-hidden="true">
+    <img id="ls-water" alt="">
+    <div class="ls-seabed"></div>
+    <div class="ls-flora" id="ls-flora"></div>
+  </div>
+  <div class="ls-content">
+    <h1 class="ls-title"><span>DEPTH</span><span>RUSH</span></h1>
+    <div id="load-track"><div id="load-fill"></div></div>
+    <div id="load-label">Loading</div>
   </div>
 </section>
 
-<!-- ============ MENU ============ -->
-<section class="screen solid" id="screen-menu">
-  <div>
-    <h1 class="wordmark">DEPTH<em>RUSH</em></h1>
-    <div class="sub">Salvage before the storm</div>
-    <div class="menu-actions">
-      <button class="menu-btn primary" id="btn-play">Dive</button>
-      <button class="menu-btn" id="btn-levels">Select dive</button>
-      <button class="menu-btn" id="btn-menu-settings">Settings</button>
-    </div>
-    <div id="menu-note"></div>
+<!-- ============ START ============ -->
+<section class="screen" id="screen-menu">
+  <div class="ss-scene" aria-hidden="true">
+    <img id="ss-bg" data-asset="go bg" data-scale="2" alt="">
+    <img id="ss-boat" data-asset="boat" alt="">
   </div>
+  <button class="ss-gear" id="btn-menu-settings" aria-label="Settings">
+    <img data-asset="setting light mode icon" data-scale="4" alt="">
+  </button>
+  <button class="ss-start" id="btn-play">
+    <img data-asset="derived:start-button.webp" alt="Start">
+  </button>
 </section>
 
 <!-- ============ LEVEL SELECT ============ -->
@@ -444,23 +769,69 @@
   <div id="levels-list" class="col"></div>
 </section>
 
-<!-- ============ FTUX ============ -->
-<section class="screen solid" id="screen-ftux">
-  <div id="ftux-card">
-    <p>The storm returns in 8 minutes.</p>
-    <p>Find the missing parts. Repair your boat. Escape.</p>
-  </div>
-  <div id="ftux-beats">
-    <div class="beat" data-beat="0"><i>◎</i><span>Drag the stick to swim. Push into rocks to drill them open.</span></div>
-    <div class="beat" data-beat="1"><i>◈</i><span>Five parts are down there. The marker above your tank points at the nearest one.</span></div>
-    <div class="beat" data-beat="2"><i>◐</i><span>Surface at the boat to refill your tank and fit what you found.</span></div>
-    <div class="beat" data-beat="3"><i>▲</i><span>Sharks patrol the seabed. Boost breaks away — it costs air.</span></div>
-  </div>
-  <button id="btn-skip">Skip</button>
+<!-- ============ INTRO VIDEO ============ -->
+<section class="screen" id="screen-intro">
+  <video id="intro-video" playsinline webkit-playsinline preload="none"></video>
+  <button id="btn-intro-skip">Skip</button>
 </section>
 
-<!-- ============ BOAT ============ -->
-<section class="screen" id="screen-boat" data-scout="off">
+<!-- ============ ALERT / BRIEFING ============ -->
+<section class="screen" id="screen-alert">
+  <img class="hs-bg" data-asset="homescreen bg" data-scale="2" alt="" aria-hidden="true">
+  <button class="hs-gear" id="btn-alert-settings" aria-label="Settings">
+    <img data-asset="setting light mode icon" data-scale="4" alt="">
+  </button>
+  <button class="hs-icon hs-help" id="al-help" aria-label="How to play">
+    <img data-asset="question_mark" data-scale="4" alt="">
+  </button>
+  <button class="hs-icon hs-list" id="al-list" aria-label="Checklist">
+    <img data-asset="checklist_icon" data-scale="4" alt="">
+  </button>
+  <div class="al-popup">
+    <img data-asset="ALERT POPUP" data-scale="4"
+         alt="Alert. The storm returns in 8 minutes. Find the missing parts. Repair your boat. Escape.">
+    <button class="al-ok" id="btn-alert-ok">
+      <img data-asset="OKAY BUTTON" data-scale="4" alt="Okay">
+    </button>
+  </div>
+</section>
+
+<!-- ============ HOME / BOAT ============ -->
+<section class="screen" id="screen-boat">
+  <img class="hs-bg" data-asset="homescreen bg" data-scale="2" alt="" aria-hidden="true">
+  <button class="hs-gear" id="btn-boat-settings" aria-label="Settings">
+    <img data-asset="setting light mode icon" data-scale="4" alt="">
+  </button>
+  <button class="hs-icon hs-help" id="btn-boat-help" aria-label="How to play">
+    <img data-asset="question_mark" data-scale="4" alt="">
+  </button>
+  <!-- Behind the checklist button in paint order, so it reads as unrolling out
+       from underneath it. Slot positions are the circle centres measured off
+       the pill artwork. -->
+  <div id="checklist-pill" class="cl-pill" data-on="false">
+    <img class="cl-pill-bg" data-asset="checklist bg" data-scale="4" alt="">
+    <span class="cl-slot" data-part="hull"      style="--y:19.38%;--i:0"><img data-asset="object 1" data-scale="4" alt="Outboard motor"></span>
+    <span class="cl-slot" data-part="propeller" style="--y:32.89%;--i:1"><img data-asset="object 2" data-scale="4" alt="Propeller"></span>
+    <span class="cl-slot" data-part="fuel"      style="--y:46.41%;--i:2"><img data-asset="object3"  data-scale="4" alt="Fuel line"></span>
+    <span class="cl-slot" data-part="rudder"    style="--y:59.92%;--i:3"><img data-asset="object 4" data-scale="4" alt="Rudder"></span>
+    <span class="cl-slot" data-part=""          style="--y:73.43%;--i:4"><img data-asset="object 5" data-scale="4" alt="Air tank"></span>
+    <span class="cl-slot" data-part="radio"     style="--y:86.95%;--i:5"><img data-asset="object 6" data-scale="4" alt="Radio"></span>
+  </div>
+  <button class="hs-icon hs-list" id="btn-boat-list" aria-label="Checklist">
+    <img data-asset="checklist_icon" data-scale="4" alt="">
+  </button>
+
+  <!-- Pre-dive only: nothing has been recovered yet, so there is nothing to
+       fit. Repair lives on the deck screen you surface onto. -->
+  <div class="hs-actions">
+    <button class="hs-btn" id="btn-dive">
+      <img data-asset="dive button" data-scale="4" alt="Dive">
+    </button>
+  </div>
+</section>
+
+<!-- ============ DECK (3D boat, mid-run) ============ -->
+<section class="screen" id="screen-deck" data-scout="off">
   <div id="boat-look"></div>
   <div class="stage-frame"></div>
   <div id="boat-status"></div>
@@ -480,8 +851,8 @@
   <div id="scout-hint" data-on="false">Drag to look &middot; stick to scout ahead</div>
 
   <div class="boat-actions">
-    <button class="big-btn primary" id="btn-dive">Dive</button>
-    <button class="big-btn" id="btn-repair"><div class="fill"></div><span>Repair</span></button>
+    <button class="big-btn primary" id="btn-deck-dive">Dive</button>
+    <button class="big-btn" id="btn-deck-repair"><div class="fill"></div><span>Repair</span></button>
   </div>
 </section>
 
@@ -505,82 +876,119 @@
   <div id="danger-vignette" data-on="false"></div>
 </section>
 
-<!-- ============ PERSISTENT HUD ============ -->
+<!-- ============ UNDERWATER HUD ============ -->
 <div class="screen" id="hud" data-on="false" style="pointer-events:none">
-  <button class="chip chip-round" id="btn-settings" aria-label="Settings">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-      <circle cx="12" cy="12" r="3.2"/>
-      <path d="M12 2.5v2.6M12 18.9v2.6M21.5 12h-2.6M5.1 12H2.5M18.7 5.3l-1.8 1.8M7.1 16.9l-1.8 1.8M18.7 18.7l-1.8-1.8M7.1 7.1L5.3 5.3"/>
-    </svg>
+  <button class="uw-gear" id="btn-settings" aria-label="Settings">
+    <img data-asset="underwater setting button" data-scale="4" alt="">
   </button>
 
-  <div id="minimap-wrap">
-    <canvas id="minimap" width="216" height="200"></canvas>
-    <div class="cap"><span>Sonar</span><b id="depth-value">0M</b></div>
+  <div class="uw-prog">
+    <img data-asset="boat progress" data-scale="4" alt="Boat progress">
+    <span id="ship-fill"></span>
   </div>
 
-  <div id="ship-progress">
-    <div class="cap">Progress of ship</div>
-    <div id="ship-track"><div id="ship-fill"></div></div>
-  </div>
+  <div class="uw-timer" id="hud-timer" data-late="false"><span id="timer-value">8:00</span></div>
 
-  <div class="chip" id="hud-timer" data-late="false">
-    <div>
-      <div class="chip-label">Storm</div>
-      <div id="timer-value">8:00</div>
+  <div id="uw-list-wrap">
+    <div id="uw-pill" data-on="false">
+      <span class="uw-slot" data-part="hull"      style="--i:0"><img data-asset="object 1" data-scale="4" alt="Outboard motor"></span>
+      <span class="uw-slot" data-part="propeller" style="--i:1"><img data-asset="object 2" data-scale="4" alt="Propeller"></span>
+      <span class="uw-slot" data-part="fuel"      style="--i:2"><img data-asset="object3"  data-scale="4" alt="Fuel line"></span>
+      <span class="uw-slot" data-part="rudder"    style="--i:3"><img data-asset="object 4" data-scale="4" alt="Rudder"></span>
+      <span class="uw-slot" data-part=""          style="--i:4"><img data-asset="object 5" data-scale="4" alt="Air tank"></span>
+      <span class="uw-slot" data-part="radio"     style="--i:5"><img data-asset="object 6" data-scale="4" alt="Radio"></span>
     </div>
+    <button class="uw-listbtn" id="btn-checklist" aria-label="Checklist">
+      <img data-asset="underwater checklist" data-scale="4" alt="">
+    </button>
   </div>
 
-  <div id="checklist" data-open="false">
-    <button id="btn-checklist">
-      <div>
-        <div class="chip-label">Parts</div>
-        <div id="checklist-count"><b id="cl-installed">0</b><span id="cl-carry"></span><span class="cl-total">/5</span></div>
-      </div>
-    </button>
-    <div id="checklist-items"></div>
+  <div id="o2-badge" data-on="false">
+    <img data-asset="derived:o2-track.webp" alt="Oxygen">
+    <span class="o2-fill" data-asset="derived:o2-fill.webp"></span>
   </div>
+
+  <!-- The design has no sonar plot. The canvas stays so the sim keeps tracking
+       which of the site has been swept, which one training objective measures. -->
+  <canvas id="minimap" width="216" height="200" hidden></canvas>
 
   <div id="toast" data-on="false"></div>
 </div>
 
-<!-- ============ SETTINGS ============ -->
-<div class="modal" id="modal-settings">
-  <div class="sheet">
-    <h2>Settings</h2>
-    <div class="row">
-      <div class="name"><i><svg viewBox="0 0 24 24" width="17" height="17" fill="currentColor"><path d="M9 17.5a2.5 2.5 0 1 1-2-2.45V6.2l10-2.1v9.9a2.5 2.5 0 1 1-2-2.45V6.55L9 7.9z"/></svg></i> Music</div>
-      <button class="toggle" id="tg-music" data-on="true" aria-label="Music"></button>
-    </div>
-    <div class="row">
-      <div class="name"><i><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M4 9.5h3.2L12 5.5v13l-4.8-4H4z" fill="currentColor" stroke="none"/><path d="M16 9.2a4 4 0 0 1 0 5.6M18.6 6.6a7.6 7.6 0 0 1 0 10.8"/></svg></i> Sound</div>
-      <button class="toggle" id="tg-sfx" data-on="true" aria-label="Sound"></button>
-    </div>
-    <div class="row">
-      <div class="name"><i><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="7" y="2.6" width="10" height="18.8" rx="2.2"/><path d="M2.2 9.4a12 12 0 0 0 0 5.2M21.8 9.4a12 12 0 0 1 0 5.2"/></svg></i> Tilt to swim</div>
-      <button class="toggle" id="tg-tilt" data-on="false" aria-label="Tilt to swim"></button>
-    </div>
-    <div class="row-note" id="tilt-note">Uses the phone's motion sensor instead of the left stick.</div>
-
-    <div class="sheet-actions">
-      <button id="btn-resume">Play</button>
-      <button id="btn-quit">Quit</button>
-    </div>
+<!-- ============ UNDERWATER SETTINGS ============ -->
+<div id="modal-uw-settings">
+  <div class="scrim"></div>
+  <div class="uwp-panel">
+    <img class="uwp-bg" data-asset="setting popup 2" data-scale="4" alt="Settings">
+    <button class="uwp-toggle uwp-r1" id="tg-uw-sfx" data-on="true" aria-label="Sound">
+      <img class="tr" data-asset="derived:uw-toggle-track.webp" alt="">
+      <img class="kn" data-asset="derived:uw-toggle-knob.webp" alt="">
+    </button>
+    <button class="uwp-toggle uwp-r2" id="tg-uw-music" data-on="true" aria-label="Music">
+      <img class="tr" data-asset="derived:uw-toggle-track.webp" alt="">
+      <img class="kn" data-asset="derived:uw-toggle-knob.webp" alt="">
+    </button>
+    <button class="uwp-hit" id="uw-home" aria-label="Surface and abandon the dive"></button>
+    <button class="uwp-hit" id="uw-play" aria-label="Resume"></button>
   </div>
 </div>
 
+<!-- ============ HOW TO PLAY ============ -->
+<div id="modal-help">
+  <div class="scrim"></div>
+  <div class="hp-wrap">
+    <img data-asset="POPUP ? FINAL (USE THIS)" data-scale="2"
+         alt="How to play. Dive: explore the ocean before the storm arrives.
+              Collect: find missing boat parts to repair the boat.
+              Escape: repair your boat and sail safely to the shore.
+              Oxygen: keep an eye on the oxygen bar.">
+    <button id="btn-help-close" aria-label="Close"></button>
+  </div>
+</div>
+
+<!-- ============ SETTINGS ============ -->
+<div id="modal-settings">
+  <div class="scrim"></div>
+  <div class="sp-panel">
+    <img class="sp-bg" data-asset="background of setting popup" data-scale="4" alt="" aria-hidden="true">
+    <img class="sp-title" data-asset="derived:settings-title.webp" alt="Settings">
+
+    <img class="sp-icon sp-r1" data-asset="speaker button" data-scale="4" alt="" aria-hidden="true">
+    <button class="sp-toggle sp-r1" id="tg-sfx" data-on="true" aria-label="Sound">
+      <img class="sp-track" data-asset="derived:toggle-track.webp" alt="">
+      <img class="sp-knob" data-asset="derived:toggle-knob.webp" alt="">
+    </button>
+
+    <img class="sp-icon sp-r2" data-asset="music button" data-scale="4" alt="" aria-hidden="true">
+    <button class="sp-toggle sp-r2" id="tg-music" data-on="true" aria-label="Music">
+      <img class="sp-track" data-asset="derived:toggle-track.webp" alt="">
+      <img class="sp-knob" data-asset="derived:toggle-knob.webp" alt="">
+    </button>
+
+    <button class="sp-play" id="btn-resume">
+      <img data-asset="play button" data-scale="4" alt="Play">
+    </button>
+  </div>
+</div>
+
+<!-- ============ GAME-OVER FILM ============ -->
+<section class="screen" id="screen-clip" data-fade="out">
+  <video id="clip-video" playsinline webkit-playsinline preload="none"></video>
+</section>
+
 <!-- ============ END ============ -->
 <section class="screen" id="screen-end" data-outcome="loss">
-  <div>
-    <div id="end-eyebrow">Run complete</div>
-    <h1 id="end-title">RUN OVER</h1>
-    <div id="end-reason"></div>
-    <ul id="end-breakdown"></ul>
-    <div id="end-training" data-met="false"></div>
-    <div id="end-best"></div>
-    <button id="btn-again">Dive Again</button>
-    <button class="menu-btn" id="btn-end-levels" style="margin:14px auto 0;width:200px;height:46px;">Select dive</button>
+  <img id="go-bg" data-asset="derived:game-over-scroll.webp" alt="" aria-hidden="true">
+  <img id="end-icon" alt="">
+  <div id="end-title">GAME OVER</div>
+  <div id="end-reason"></div>
+  <div id="end-card">
+    <div class="go-row"><span>Depth Reached</span><b id="end-depth">0 m</b></div>
+    <div class="go-row"><span>Parts Collected</span><b id="end-parts">0/0</b></div>
+    <div class="go-row"><span>Time Survived</span><b id="end-time">00:00</b></div>
   </div>
+  <button id="btn-again"><img data-asset="RETRY BUTTON" data-scale="4" alt="Retry"></button>
+  <button class="menu-btn" id="btn-end-levels">Select dive</button>
 </section>
 
 <script type="module" src="./src/main.js"></script>

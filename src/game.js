@@ -97,6 +97,10 @@ export class Game {
       new THREE.MeshBasicMaterial({ color: PALETTE.ok, fog: false }));
     this.o2Fill.position.z = 0.01;
     this.o2Bar.add(back, this.o2Fill);
+    // The oxygen readout is drawn in the DOM now, from the delivered artwork.
+    // The group stays because the sonar chevron below still rides on it.
+    back.visible = false;
+    this.o2Fill.visible = false;
 
     this.sonarTick = new THREE.Mesh(
       new THREE.ConeGeometry(0.16, 0.34, 3),
@@ -243,6 +247,7 @@ export class Game {
       camDist: CONFIG.camera.distance,
       // measurements for the dive's training objective
       minAir: CONFIG.oxygen.max,
+      maxDepth: 0,
       contacts: 0,
       planted: 0,
       delivered: 0,
@@ -362,12 +367,12 @@ export class Game {
           s.delivered += 1;
           this._stowCrate();
           this.hooks.onToast?.(`Crate secured — ${s.delivered}/${this.partsTotal}`);
-          if (s.delivered >= this.partsTotal) return this._end('win', 'Cargo delivered. The boat sails.');
+          if (s.delivered >= this.partsTotal) return this._end('win', 'Cargo delivered. The boat sails.', 'win');
         } else {
           const id = s.carrying.shift();
           s.installed.push(id);
           this.hooks.onToast?.(`${PARTS.find((p) => p.id === id).label} fitted`);
-          if (s.installed.length >= this.partsTotal) return this._end('win', 'The boat sails.');
+          if (s.installed.length >= this.partsTotal) return this._end('win', 'The boat sails.', 'win');
         }
         if (!this.boatAction.enabled) this.setRepairing(false);
       }
@@ -562,6 +567,7 @@ export class Game {
       this._emitBubble(p.x + _fwd.x * 0.5, p.y + 0.15, p.z + _fwd.z * 0.5, s.boosting || drilling);
     }
 
+    s.maxDepth = Math.max(s.maxDepth, W.surfaceY - p.y);
     this.minimap?.reveal(p.x, p.z, 4.0 + s.lightStacks * 1.6);
 
     // --- collection ---
@@ -616,7 +622,7 @@ export class Game {
       // A survey only counts once it is called in from the deck, so the swim
       // home still matters on a beacon dive.
       if (this.objective === 'beacon' && s.planted >= this.partsTotal) {
-        return this._end('win', 'Survey called in. The boat sails.');
+        return this._end('win', 'Survey called in. The boat sails.', 'win');
       }
       const a = this.boatAction;
       this.hooks.onToast?.(a.enabled ? `Aboard — hold ${a.label}` : 'Aboard — tank refilled');
@@ -645,7 +651,7 @@ export class Game {
       s.sonar = { dist: nearD, mode: 'part', tx: near.x, ty: near.y, tz: near.z };
     }
 
-    if (s.oxygen <= 0) return this._end('loss', 'Your tank ran dry.');
+    if (s.oxygen <= 0) return this._end('loss', 'You ran out of oxygen.', 'oxygen');
   }
 
   _plantBeacon(anchor) {
@@ -742,7 +748,7 @@ export class Game {
       if (p && d < spec.contactRadius) {
         if (spec.lethal) {
           s.contacts += 1;
-          this._end('loss', `A ${spec.label.toLowerCase()} caught you.`);
+          this._end('loss', `A ${spec.label.toLowerCase()} caught you.`, 'shark');
           return true;
         }
         if (e.biteTimer <= 0) {
@@ -844,11 +850,14 @@ export class Game {
     return { ...t, value, met: hit && outcome === 'win' };
   }
 
-  _end(outcome, reason) {
+  // `cause` is what actually finished the run — 'shark', 'oxygen', 'storm',
+  // 'quit' or 'win' — which is what selects the game-over film and artwork.
+  _end(outcome, reason, cause = outcome === 'win' ? 'win' : 'quit') {
     const s = this.state;
     if (s.outcome) return;
     s.outcome = outcome;
     s.reason = reason;
+    s.cause = cause;
     s.training = this._evaluateTraining(outcome);
     s.breakdown = {
       parts: this.goalDone * CONFIG.score.perPartInstalled,
@@ -903,7 +912,7 @@ export class Game {
     s.timeLeft -= dt;
     if (s.timeLeft <= 0) {
       s.timeLeft = 0;
-      return this._end('loss', 'The storm made landfall.');
+      return this._end('loss', 'Thunderstorm arrived.', 'storm');
     }
 
     if (this.mode === 'dive') this._updateDive(dt);
@@ -922,6 +931,15 @@ export class Game {
     const pct = clamp(s.oxygen / CONFIG.oxygen.max, 0, 1);
     this.o2Bar.position.set(p.x, p.y + 1.15, p.z);
     this.o2Bar.quaternion.copy(this.camera.quaternion);
+
+    // Where the diver lands on screen, so the DOM oxygen badge can ride with
+    // them. Normalised 0..1 from the top-left; `behind` means off-camera.
+    _tmp.set(p.x, p.y + 0.95, p.z).project(this.camera);
+    s.screen = {
+      x: (_tmp.x * 0.5 + 0.5),
+      y: (-_tmp.y * 0.5 + 0.5),
+      behind: _tmp.z > 1,
+    };
     this.o2Fill.scale.x = Math.max(0.001, pct);
     this.o2Fill.position.x = -(1.32 * (1 - pct)) / 2;
     this.o2Fill.material.color.setHex(
