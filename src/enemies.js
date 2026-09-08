@@ -16,6 +16,10 @@ export const ENEMY_TYPES = {
   shark: {
     label: 'Shark',
     lethal: true,
+    // The hunter shares the diver's plane. Danger is measured ignoring Z in
+    // 2.7D, so a shark drifting in depth could bite from what looked like a
+    // safe distance; on the plane, what you see is what can reach you.
+    planeLocked: true,
     patrolSpeed: 1.9,
     chaseSpeed: 3.2,
     detectRadius: 6.0,

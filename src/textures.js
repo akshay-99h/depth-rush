@@ -51,13 +51,13 @@ function speckle(ctx, size, count, colors, minR, maxR, seed = 7) {
 export function sandTexture() {
   const size = 512;
   const { c, ctx } = canvas(size);
-  ctx.fillStyle = '#1b3f45';
+  ctx.fillStyle = '#e0c589';
   ctx.fillRect(0, 0, size, size);
   ctx.globalAlpha = 0.5;
   valueNoise(ctx, size, 40, 0.16, 21, 7);
   ctx.globalAlpha = 1;
 
-  ctx.strokeStyle = 'rgba(140,205,205,0.09)';
+  ctx.strokeStyle = 'rgba(255,246,206,0.16)';
   ctx.lineWidth = 3;
   for (let i = 0; i < 26; i++) {
     ctx.beginPath();
@@ -68,7 +68,7 @@ export function sandTexture() {
     }
     ctx.stroke();
   }
-  speckle(ctx, size, 900, ['rgba(190,225,220,0.16)', 'rgba(10,30,36,0.28)'], 0.6, 2.2, 3);
+  speckle(ctx, size, 900, ['rgba(255,250,222,0.22)', 'rgba(158,122,64,0.16)'], 0.6, 2.2, 3);
   return toTexture(c, { repeat: 3.5 });
 }
 
@@ -76,14 +76,14 @@ export function sandTexture() {
 export function rockTexture() {
   const size = 256;
   const { c, ctx } = canvas(size);
-  ctx.fillStyle = '#14313f';
+  ctx.fillStyle = '#5d8298';
   ctx.fillRect(0, 0, size, size);
   ctx.globalAlpha = 0.55;
   valueNoise(ctx, size, 28, 0.3, 5, 4);
   ctx.globalAlpha = 1;
-  speckle(ctx, size, 260, ['rgba(120,175,185,0.20)', 'rgba(4,18,24,0.5)'], 1, 5, 11);
+  speckle(ctx, size, 260, ['rgba(198,224,238,0.26)', 'rgba(44,74,96,0.34)'], 1, 5, 11);
 
-  ctx.strokeStyle = 'rgba(4,16,22,0.55)';
+  ctx.strokeStyle = 'rgba(38,66,88,0.45)';
   ctx.lineWidth = 2;
   let s = 99;
   const rnd = () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };

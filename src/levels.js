@@ -14,25 +14,25 @@ export const BIOMES = [
     id: 'shelf',
     name: 'Continental Shelf',
     blurb: 'Sunlit water over a sand bed. Sharks work the shallows.',
-    palette: { shallow: 0x14586b, abyss: 0x04141c },
-    depthFade: { fogNearSurface: 26, fogFarSurface: 70, fogNearDeep: 6, fogFarDeep: 24,
-                 ambientSurface: 1.3, ambientDeep: 0.22, sunSurface: 2.2, sunDeep: 0.16 },
+    palette: { shallow: 0x3fb8ea, abyss: 0x0b4076 },
+    depthFade: { fogNearSurface: 24, fogFarSurface: 66, fogNearDeep: 8, fogFarDeep: 30,
+                 ambientSurface: 1.15, ambientDeep: 0.44, sunSurface: 1.95, sunDeep: 0.4 },
   },
   {
     id: 'trench',
     name: 'Kelp Trench',
     blurb: 'A silted cut in the shelf. Squid hang in the murk and rip at your tank.',
-    palette: { shallow: 0x0e4450, abyss: 0x030f16 },
-    depthFade: { fogNearSurface: 18, fogFarSurface: 52, fogNearDeep: 4, fogFarDeep: 16,
-                 ambientSurface: 1.0, ambientDeep: 0.12, sunSurface: 1.6, sunDeep: 0.06 },
+    palette: { shallow: 0x2e97cf, abyss: 0x08305e },
+    depthFade: { fogNearSurface: 19, fogFarSurface: 54, fogNearDeep: 6, fogFarDeep: 23,
+                 ambientSurface: 0.98, ambientDeep: 0.33, sunSurface: 1.65, sunDeep: 0.3 },
   },
   {
     id: 'vent',
     name: 'Abyssal Vent',
     blurb: 'Past the light. Your lamp is the only thing down here that is yours.',
-    palette: { shallow: 0x0a2c3a, abyss: 0x01070b },
-    depthFade: { fogNearSurface: 12, fogFarSurface: 36, fogNearDeep: 2.5, fogFarDeep: 11,
-                 ambientSurface: 0.7, ambientDeep: 0.05, sunSurface: 1.0, sunDeep: 0.02 },
+    palette: { shallow: 0x2472ac, abyss: 0x041f42 },
+    depthFade: { fogNearSurface: 14, fogFarSurface: 40, fogNearDeep: 4, fogFarDeep: 16,
+                 ambientSurface: 0.8, ambientDeep: 0.2, sunSurface: 1.3, sunDeep: 0.16 },
   },
 ];
 
@@ -67,7 +67,7 @@ export const LEVELS = [
     storm: 420, goal: 5, partsInRocks: 3,
     spawn: { rocks: 15, tanks: 5, fins: 3, floodlights: 3 },
     enemies: [{ type: 'shark', count: 3 }, { type: 'squid', count: 1 }],
-    depthFade: { ambientSurface: 0.95, sunSurface: 1.5 },
+    depthFade: { ambientSurface: 0.95, sunSurface: 1.6 },
   },
 
   // ---- Kelp Trench -------------------------------------------------------
@@ -171,25 +171,45 @@ const KEY = 'depthrush.progress.v1';
 export function loadProgress() {
   try {
     const raw = JSON.parse(localStorage.getItem(KEY) || '{}');
-    return { cleared: raw.cleared ?? {}, best: raw.best ?? {} };
+    return { cleared: raw.cleared ?? {}, best: raw.best ?? {}, stars: raw.stars ?? {} };
   } catch {
-    return { cleared: {}, best: {} };
+    return { cleared: {}, best: {}, stars: {} };
   }
 }
 
-export function saveResult(levelId, outcome, score) {
+// Stars rate the run, not just the win: one for finishing, one for doing what
+// the dive set out to teach, one for getting home with time in hand. Only the
+// best rating for a dive is kept.
+export const MAX_STARS = 3;
+export function ratingFor(outcome, s, stormSeconds) {
+  if (outcome !== 'win') return 0;
+  let n = 1;
+  if (s.training?.met) n += 1;
+  if (s.timeLeft >= stormSeconds * 0.25) n += 1;
+  return n;
+}
+
+export function saveResult(levelId, outcome, score, stars = 0) {
   const p = loadProgress();
   if (outcome === 'win') p.cleared[levelId] = true;
   p.best[levelId] = Math.max(score, p.best[levelId] ?? 0);
+  p.stars[levelId] = Math.max(stars, p.stars[levelId] ?? 0);
   try { localStorage.setItem(KEY, JSON.stringify(p)); } catch { /* private mode */ }
   return p;
 }
 
-// Every dive is open from the start. This build is a prototype for judging, not
-// a retention curve — gating levels behind clears would mean most people only
-// ever see the first one. Clears and best scores are still tracked and shown.
-export function isUnlocked() {
-  return true;
+// Dives open in order: the first is always available, and each one after it
+// unlocks when the dive before it has been cleared.
+export function isUnlocked(id, progress) {
+  const i = LEVELS.findIndex((l) => l.id === id);
+  if (i <= 0) return true;
+  return !!progress?.cleared?.[LEVELS[i - 1].id];
+}
+
+/** How many dives have been cleared — the start screen uses this to decide
+ *  whether the level picker is worth offering yet. */
+export function clearedCount(progress) {
+  return LEVELS.filter((l) => progress?.cleared?.[l.id]).length;
 }
 
 export function firstUnplayed(progress) {

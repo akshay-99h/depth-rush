@@ -714,12 +714,20 @@ export class Game {
         wz = Math.sin(e.heading) * spec.patrolSpeed;
         wy = clamp((e.laneY - e.y) * 0.8, -1.2, 1.2);
       }
+      // A plane-locked hunter patrols across the plane at a constant lateral
+      // speed rather than losing it to a heading that points into the screen.
+      const onPlane = PLAY.planar && spec.planeLocked;
+      if (onPlane) {
+        if (!chasing) wx = (Math.cos(e.heading) >= 0 ? 1 : -1) * spec.patrolSpeed;
+        wz = 0;
+      }
       const turn = Math.min(1, spec.turnRate * dt);
       e.vx += (wx - e.vx) * turn;
       e.vy += (wy - e.vy) * turn;
       e.vz += (wz - e.vz) * turn;
 
       e.x += e.vx * dt; e.y += e.vy * dt; e.z += e.vz * dt;
+      if (onPlane) e.z += (PLAY.planeZ - e.z) * Math.min(1, 6 * dt);
       if (e.x <= -W.halfWidth || e.x >= W.halfWidth) {
         e.x = clamp(e.x, -W.halfWidth, W.halfWidth);
         e.vx *= -1; e.heading = Math.PI - e.heading;

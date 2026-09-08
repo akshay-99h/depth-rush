@@ -48,21 +48,21 @@ let TEX = null;
 function textures() {
   if (TEX) return TEX;
 
-  // deck planks
+  // deck planks, tuned to the game's deep-blue and cyan UI palette
   const deck = canvasTex(256, 256, (ctx, w, h) => {
-    ctx.fillStyle = '#7c4632'; ctx.fillRect(0, 0, w, h);
+    ctx.fillStyle = '#245b78'; ctx.fillRect(0, 0, w, h);
     const planks = 6, pw = w / planks;
     for (let i = 0; i < planks; i++) {
-      ctx.fillStyle = jitter('#7f4a34', 0.10);
+      ctx.fillStyle = jitter('#286681', 0.10);
       ctx.fillRect(i * pw + 1, 0, pw - 2, h);
-      ctx.strokeStyle = 'rgba(60,30,20,0.25)'; ctx.lineWidth = 1;
+      ctx.strokeStyle = 'rgba(8,35,65,0.35)'; ctx.lineWidth = 1;
       for (let g = 0; g < 5; g++) {
         const gx = i * pw + 4 + Math.random() * (pw - 8);
         ctx.beginPath(); ctx.moveTo(gx, 0);
         ctx.bezierCurveTo(gx + 3, h * 0.3, gx - 3, h * 0.6, gx + 2, h);
         ctx.stroke();
       }
-      ctx.fillStyle = 'rgba(35,18,12,0.85)';
+      ctx.fillStyle = 'rgba(7,31,57,0.85)';
       ctx.fillRect(i * pw - 1, 0, 2, h);
       ctx.fillRect(i * pw, (i * 97) % h, pw, 2);
     }
@@ -97,18 +97,18 @@ function textures() {
   // painted metal hull with rust streaks near the waterline
   const hull = canvasTex(256, 128, (ctx, w, h) => {
     const g = ctx.createLinearGradient(0, 0, 0, h);
-    g.addColorStop(0, '#6f7a76');          // sun-caught topsides
-    g.addColorStop(0.52, '#57615f');
-    g.addColorStop(0.62, '#8d4a3a');       // boot-top stripe
-    g.addColorStop(0.70, '#33302c');       // antifouling below the waterline
-    g.addColorStop(1, '#26241f');
+    g.addColorStop(0, '#55c9df');          // sun-caught cyan topsides
+    g.addColorStop(0.52, '#238eb5');
+    g.addColorStop(0.62, '#17658f');       // deep-blue boot-top stripe
+    g.addColorStop(0.70, '#123d69');       // darker underwater hull
+    g.addColorStop(1, '#092846');
     ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
     for (let i = 0; i < 320; i++) {
-      ctx.fillStyle = `rgba(${150 + Math.random() * 60 | 0},${158 + Math.random() * 55 | 0},${150 + Math.random() * 50 | 0},0.10)`;
+      ctx.fillStyle = `rgba(${120 + Math.random() * 70 | 0},${210 + Math.random() * 40 | 0},${225 + Math.random() * 30 | 0},0.10)`;
       ctx.fillRect(Math.random() * w, Math.random() * h * 0.6, 3 + Math.random() * 12, 1 + Math.random() * 3);
     }
     for (let r = 0; r < 26; r++) {
-      ctx.fillStyle = `rgba(150,88,48,${0.14 + Math.random() * 0.18})`;
+      ctx.fillStyle = `rgba(20,82,125,${0.14 + Math.random() * 0.18})`;
       ctx.fillRect(Math.random() * w, h * 0.5 + Math.random() * h * 0.28, 2 + Math.random() * 3, 6 + Math.random() * 22);
     }
     // plate seams
@@ -128,9 +128,9 @@ function textures() {
 function materials() {
   const T = textures();
   return {
-    hull: new THREE.MeshStandardMaterial({ map: T.hull, color: 0xffffff, roughness: 0.7, metalness: 0.15, emissive: 0x16262c, emissiveIntensity: 0.55 }),
-    deck: new THREE.MeshStandardMaterial({ map: T.deck, roughness: 0.85, metalness: 0.0, emissive: 0x2a140c, emissiveIntensity: 0.4 }),
-    rim: new THREE.MeshStandardMaterial({ color: 0x211f1d, roughness: 0.6, metalness: 0.2 }),
+    hull: new THREE.MeshStandardMaterial({ map: T.hull, color: 0xffffff, roughness: 0.7, metalness: 0.15, emissive: 0x073b62, emissiveIntensity: 0.45 }),
+    deck: new THREE.MeshStandardMaterial({ map: T.deck, roughness: 0.85, metalness: 0.0, emissive: 0x062d4c, emissiveIntensity: 0.35 }),
+    rim: new THREE.MeshStandardMaterial({ color: 0x09263f, roughness: 0.6, metalness: 0.2 }),
     crate: new THREE.MeshStandardMaterial({ map: T.crate, roughness: 0.8 }),
     drumDark: new THREE.MeshStandardMaterial({ color: 0x687076, roughness: 0.45, metalness: 0.65 }),
     drumLight: new THREE.MeshStandardMaterial({ color: 0x9ba6a6, roughness: 0.4, metalness: 0.6 }),

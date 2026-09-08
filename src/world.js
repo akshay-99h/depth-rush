@@ -19,10 +19,12 @@ const W = CONFIG.world;
 const D = CONFIG.depthFade;
 
 export const PALETTE = {
-  abyss: 0x04141c,
-  deep: 0x072430,
-  water: 0x0d3a4a,
-  shallow: 0x14586b,
+  // Tuned to sit with the painted UI: saturated cyan at the surface falling to a
+  // deep blue rather than to black, so depth still reads without going murky.
+  abyss: 0x0b4076,
+  deep: 0x12588c,
+  water: 0x2384c4,
+  shallow: 0x3fb8ea,
   foam: 0x7fd4d9,
   ok: 0x35d6c4,
   signal: 0xffb340,
@@ -55,7 +57,7 @@ export function createRenderer(canvas) {
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.15;
+  renderer.toneMappingExposure = 0.98;
   return renderer;
 }
 
@@ -75,10 +77,10 @@ export function createScene() {
   scene.background = new THREE.Color(PALETTE.shallow);
   scene.fog = new THREE.Fog(PALETTE.shallow, D.fogNearSurface, D.fogFarSurface);
 
-  const sun = new THREE.DirectionalLight(0xd8f6ff, D.sunSurface);
+  const sun = new THREE.DirectionalLight(0xeafaff, D.sunSurface);
   sun.position.set(6, 40, 10);
   scene.add(sun);
-  const ambient = new THREE.HemisphereLight(0x8fe3f0, 0x07202a, D.ambientSurface);
+  const ambient = new THREE.HemisphereLight(0xc4f0ff, 0x2f7bb0, D.ambientSurface);
   scene.add(ambient);
 
   return { scene, sun, ambient };
@@ -113,7 +115,7 @@ export function buildEnvironment(scene) {
   // looking up, which is what makes "swim up to breathe" legible.
   const surface = add(new THREE.Mesh(
     new THREE.PlaneGeometry(spanX * 3, spanZ * 3, 24, 24),
-    new THREE.MeshBasicMaterial({ color: 0xa8ecf2, side: THREE.DoubleSide, transparent: true, opacity: 0.55 })
+    new THREE.MeshBasicMaterial({ color: 0xa6e6ff, side: THREE.DoubleSide, transparent: true, opacity: 0.5 })
   ));
   surface.rotation.x = -Math.PI / 2;
   surface.position.y = W.surfaceY;
@@ -185,7 +187,7 @@ export function buildEnvironment(scene) {
     const geo = new THREE.PlaneGeometry(0.34 + Math.random() * 0.24, h, 1, 8);
     geo.translate(0, h / 2, 0);
     const mat = new THREE.MeshStandardMaterial({
-      color: 0x11463f, roughness: 0.9, metalness: 0,
+      color: 0x2e8f6b, roughness: 0.9, metalness: 0,
       side: THREE.DoubleSide, transparent: true, opacity: 0.92,
     });
     const g = add(new THREE.Group());
@@ -213,7 +215,7 @@ export function buildEnvironment(scene) {
     const s = 1.4 + Math.random() * 3.2;
     const b = new THREE.Mesh(
       new THREE.IcosahedronGeometry(s, 0),
-      new THREE.MeshStandardMaterial({ color: 0x0d2a35, roughness: 1, metalness: 0 })
+      new THREE.MeshStandardMaterial({ color: 0x4a7d99, roughness: 1, metalness: 0 })
     );
     b.position.set((Math.random() - 0.5) * spanX * 1.15, W.seabedY + s * 0.35 - 0.6, sceneryZ(spanZ * 1.15));
     b.rotation.set(Math.random() * 3, Math.random() * 3, Math.random() * 3);
@@ -615,7 +617,9 @@ export function generateLevel(rng, scenery = []) {
     enemies.push({
       type, spec,
       x: rng.range(-sx, sx), y: laneY,
-      z: P.planar ? P.planeZ + rng.range(-P.enemyBandZ, P.enemyBandZ) : rng.range(-sz, sz),
+      z: P.planar
+        ? (spec.planeLocked ? P.planeZ : P.planeZ + rng.range(-P.enemyBandZ, P.enemyBandZ))
+        : rng.range(-sz, sz),
       laneY,
       vx: Math.cos(heading) * spec.patrolSpeed,
       vy: 0,

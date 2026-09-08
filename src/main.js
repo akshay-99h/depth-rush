@@ -10,8 +10,8 @@ import { Hud } from './hud.js';
 import { Minimap } from './minimap.js';
 import { Tilt } from './tilt.js';
 import { CONFIG } from './config.js';
-import { LEVELS, BIOMES, applyLevel, getLevel, getBiome,
-         loadProgress, saveResult, isUnlocked, firstUnplayed } from './levels.js';
+import { LEVELS, BIOMES, applyLevel, getLevel, getBiome, loadProgress, saveResult,
+         isUnlocked, firstUnplayed, clearedCount, ratingFor, MAX_STARS } from './levels.js';
 import { startLanding } from './landing.js';
 import { hydrateAssets, resolve, video } from './assets.js';
 
@@ -82,19 +82,24 @@ addEventListener('orientationchange', resize);
 
 /* --------------------------------------------------------------- landing */
 
-// The landing screen owns its own scene, preloading and bar; it resolves when
-// the player taps to begin. The tap is also what unlocks audio.
+// The landing screen owns its own scene, preloading and bar; its tap starts the
+// first dive intro directly. The tap is also what unlocks audio.
 startLanding().then(() => {
   audio.unlock();
-  showMenu();
+  startLevel(getLevel(firstUnplayed(progress)), true);
 });
 
 /* ------------------------------------------------------------------ menu */
 
 function showMenu() {
   progress = loadProgress();
+  // The picker only earns its place once a dive has been cleared — before that
+  // there is exactly one dive open and Start goes straight to it.
+  $('btn-levels').hidden = clearedCount(progress) === 0;
   showScreen('menu');
 }
+
+$('btn-levels').addEventListener('click', () => { audio.unlock(); showLevels(); });
 
 $('btn-play').addEventListener('click', () => {
   audio.unlock();
@@ -102,12 +107,78 @@ $('btn-play').addEventListener('click', () => {
 });
 $('btn-levels-back').addEventListener('click', showMenu);
 
+const JOB_LABEL = { salvage: 'Salvage', beacon: 'Survey', haul: 'Cargo' };
+const FOE_PLURAL = { shark: 'sharks', squid: 'squid', jelly: 'jellies' };
+const mmssOf = (secs) => `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`;
+
+// The stat chips a dive is described by, shared by the picker and the briefing.
+// Inline SVG so the rating scales with the card and ships no asset.
+function starRow(earned) {
+  let out = '';
+  for (let i = 0; i < MAX_STARS; i++) {
+    out += `<svg class="star" data-on="${i < earned}" viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M12 2.6l2.9 5.9 6.5.95-4.7 4.6 1.1 6.45L12 17.45 6.2 20.5l1.1-6.45-4.7-4.6 6.5-.95z"/></svg>`;
+  }
+  return `<span class="stars" role="img" aria-label="${earned} of ${MAX_STARS} stars">${out}</span>`;
+}
+
+function levelChips(l) {
+  const foes = l.enemies
+    .map((e) => `<span class="foe"><b>${e.count}</b> ${e.count > 1 ? FOE_PLURAL[e.type] : e.type}</span>`)
+    .join('');
+  return `<span><b>${l.world.halfWidth * 2}m</b> across</span>
+          <span><b>${Math.abs(l.world.seabedY)}m</b> deep</span>
+          <span><b>${l.goal}</b> targets</span>
+          <span><b>${mmssOf(l.storm)}</b> storm</span>${foes}`;
+}
+
+/* ------------------------------------------------------- level briefing */
+
+// Shown when the player commits to the dive: what this dive is, what it asks
+// for, and the skill it sets out to teach — then it counts itself in. The storm
+// clock is held while it is up; five seconds of weather for an unskippable
+// briefing would not be fair.
+const BRIEF_SECONDS = 5;
+
+function showBrief(level) {
+  return new Promise((resolve) => {
+    const n = LEVELS.indexOf(level) + 1;
+    $('lb-eyebrow').textContent = `Dive ${n} of ${LEVELS.length} \u00b7 ${getBiome(level.biome).name}`;
+    $('lb-name').textContent = level.name;
+    const job = $('lb-job');
+    job.textContent = JOB_LABEL[level.objective];
+    job.dataset.job = level.objective;
+    $('lb-brief').textContent = level.brief;
+    const t = level.training;
+    $('lb-trains').style.display = t ? '' : 'none';
+    if (t) { $('lb-skill').textContent = t.skill; $('lb-tbrief').textContent = t.brief; }
+    $('lb-stats').innerHTML = levelChips(level);
+
+    const modal = $('modal-brief');
+    const count = $('lb-count');
+    const wasPaused = game.paused;
+    modal.dataset.on = 'true';
+    game.paused = true;
+
+    let left = BRIEF_SECONDS;
+    count.textContent = left;
+    const id = setInterval(() => {
+      left -= 1;
+      if (left < 1) {
+        clearInterval(id);
+        modal.dataset.on = 'false';
+        game.paused = wasPaused;
+        resolve();
+        return;
+      }
+      count.textContent = left;
+    }, 1000);
+  });
+}
+
 function showLevels() {
   progress = loadProgress();
   const list = $('levels-list');
-  const plural = { shark: 'sharks', squid: 'squid', jelly: 'jellies' };
-  const JOB = { salvage: 'Salvage', beacon: 'Survey', haul: 'Cargo' };
-
   list.innerHTML = BIOMES.map((b) => {
     const inBiome = LEVELS.filter((l) => l.biome === b.id);
     const done = inBiome.filter((l) => progress.cleared[l.id]).length;
@@ -115,31 +186,24 @@ function showLevels() {
       const unlocked = isUnlocked(l.id, progress);
       const cleared = !!progress.cleared[l.id];
       const best = progress.best[l.id] ?? 0;
-      const foes = l.enemies
-        .map((e) => `<span class="foe"><b>${e.count}</b> ${e.count > 1 ? plural[e.type] : e.type}</span>`)
-        .join('');
-      const mark = cleared ? '&#10003;' : unlocked ? LEVELS.indexOf(l) + 1 : '&#128274;';
+      const stars = progress.stars?.[l.id] ?? 0;
+      const node = cleared ? '&#10003;' : unlocked ? LEVELS.indexOf(l) + 1 : '&#128274;';
       return `<button class="lvl" data-id="${l.id}" data-locked="${!unlocked}"
-                data-cleared="${cleared}" ${unlocked ? '' : 'disabled'}>
-        <span class="idx">${mark}</span>
+                data-cleared="${cleared}" data-job="${l.objective}" ${unlocked ? '' : 'disabled'}>
+        <span class="node">${node}</span>
         <span>
-          <span class="top">
+          <span class="head">
             <span class="name">${l.name}</span>
-            <span class="job" data-job="${l.objective}">${JOB[l.objective]}</span>
+            <span class="job" data-job="${l.objective}">${JOB_LABEL[l.objective]}</span>
+            ${best ? `<span class="score"><i>Best</i>${best.toLocaleString()}</span>` : ''}
           </span>
+          <span class="rating">${starRow(stars)}</span>
           <span class="brief">${l.brief}</span>
           ${l.training ? `<span class="trains">
             <span class="lab">Trains</span><span class="skill">${l.training.skill}</span>
           </span>` : ''}
-          <span class="stats">
-            <span><b>${l.world.halfWidth * 2}m</b> across</span>
-            <span><b>${Math.abs(l.world.seabedY)}m</b> deep</span>
-            <span><b>${l.goal}</b> targets</span>
-            <span><b>${Math.floor(l.storm / 60)}:${String(l.storm % 60).padStart(2, '0')}</b> storm</span>
-            ${foes}
-          </span>
+          <span class="stats">${levelChips(l)}</span>
         </span>
-        <span class="score">${best ? best.toLocaleString() : ''}</span>
       </button>`;
     }).join('');
     return `<div class="biome">
@@ -274,22 +338,23 @@ helpModal.querySelector('.scrim').addEventListener('click', closeHelp);
 function beginRun() {
   game.startRun();
   showScreen('boat');
-  hud.toastMessage(`${getBiome(currentLevel.biome).name} — ${currentLevel.name}`);
-  if (currentLevel.training) {
-    setTimeout(() => {
-      if (screen === 'boat' || screen === 'dive') {
-        hud.toastMessage(`Objective: ${currentLevel.training.skill}`);
-      }
-    }, 1900);
-  }
 }
 
 bindHold($('btn-boost'), (on) => { game.boostHeld = on; });
 bindKeyboard(moveStick, lookStick, (on) => { game.boostHeld = on; });
 
-const dive = () => { audio.unlock(); game.setMode('dive'); };
-$('btn-dive').addEventListener('click', dive);        // painted home, pre-dive
-$('btn-deck-dive').addEventListener('click', dive);   // 3D deck, mid-run
+// The deck's Dive goes straight in — it is used repeatedly through a run, and
+// the briefing would be in the way. The home screen's Dive is the once-a-run
+// commitment, so that is the one that carries it.
+let briefing = false;
+$('btn-dive').addEventListener('click', async () => {
+  if (briefing) return;
+  briefing = true;
+  audio.unlock();
+  try { await showBrief(currentLevel); } finally { briefing = false; }
+  game.setMode('dive');
+});
+$('btn-deck-dive').addEventListener('click', () => { audio.unlock(); game.setMode('dive'); });
 
 $('btn-recentre').addEventListener('click', () => game.recentre());
 $('btn-scout').addEventListener('click', () => {
@@ -426,12 +491,17 @@ const mmss = (secs) => `${String(Math.floor(secs / 60)).padStart(2, '0')}:`
 
 async function showEnd(outcome, reason, s) {
   const spec = GAME_OVER[s.cause] ?? GAME_OVER.quit;
-  progress = saveResult(currentLevel.id, outcome, s.score);
+  const stars = ratingFor(outcome, s, CONFIG.run.stormSeconds);
+  progress = saveResult(currentLevel.id, outcome, s.score, stars);
 
   const el = $('screen-end');
   el.dataset.outcome = outcome;
   $('end-title').textContent = outcome === 'win' ? GAME_OVER.win.title : spec.title;
   $('end-reason').textContent = reason;
+  // Only a win earns a rating, so the loss screens stay as designed.
+  const starBox = $('end-stars');
+  starBox.hidden = outcome !== 'win';
+  if (outcome === 'win') starBox.innerHTML = starRow(stars);
 
   const icon = $('end-icon');
   const art = outcome === 'win' ? null : spec.icon;

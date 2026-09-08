@@ -123,14 +123,14 @@ export const CONFIG = {
 
   // How hard the water closes in with depth. 0 at the surface, 1 on the bed.
   depthFade: {
-    fogNearSurface: 26,
-    fogFarSurface: 70,
-    fogNearDeep: 5,
-    fogFarDeep: 20,
-    ambientSurface: 1.25,
-    ambientDeep: 0.16,
-    sunSurface: 2.1,
-    sunDeep: 0.12,
+    fogNearSurface: 24,
+    fogFarSurface: 66,
+    fogNearDeep: 8,
+    fogFarDeep: 30,
+    ambientSurface: 1.15,
+    ambientDeep: 0.44,
+    sunSurface: 1.95,
+    sunDeep: 0.4,
   },
 
   score: {

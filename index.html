@@ -73,8 +73,19 @@
   .uw-gear img { width: 100%; height: auto; display: block;
                  filter: drop-shadow(0 2px 5px rgba(4,50,90,0.4)); }
 
-  .uw-prog { position: absolute; top: calc(var(--safe-t) + 24px); left: 20%; right: 26.5%; }
-  .uw-prog img { width: 100%; height: auto; display: block; }
+  /* Rebuilt from the artwork so the caption is real text. */
+  .uw-prog {
+    position: absolute; top: calc(var(--safe-t) + 24px); left: 20%; right: 26.5%;
+    height: clamp(13px, 3.6vw, 19px);
+    border-radius: 999px; overflow: hidden;
+    background: linear-gradient(180deg, #2fe2ff 0%, #17cdf5 100%);
+    box-shadow: inset 0 -0.12em 0 rgba(10,70,100,0.14), 0 1px 3px rgba(4,50,90,0.35);
+  }
+  .uw-prog-label {
+    position: absolute; inset: 0; display: grid; place-items: center;
+    font-size: clamp(7px, 2.1vw, 10px); font-weight: 800;
+    letter-spacing: 0.08em; color: #06263c; white-space: nowrap;
+  }
   /* The artwork's navy cap at the left end is the empty state; the fill grows
      out of it rather than sitting on top of it. */
   #ship-fill {
@@ -192,13 +203,18 @@
   .uwp-toggle[data-on="true"]  img.kn { left: 61.43%; }
   .uwp-toggle[data-on="false"] img.kn { left: 4.41%; }
   .uwp-toggle[data-on="false"] img.tr { filter: grayscale(0.6) brightness(0.9); }
-  .uwp-hit {
-    position: absolute; border-radius: 50%; background: none; pointer-events: auto;
+  .uwp-icon {
+    position: absolute; left: 21.4%; width: 19.5%; height: auto;
+    transform: translateY(-50%);
+  }
+  .uwp-btn {
+    position: absolute; width: 22%; pointer-events: auto; line-height: 0;
     transition: transform 0.08s ease;
   }
-  .uwp-hit:active { transform: scale(0.92); }
-  #uw-home { left: 11.9%; top: 71.3%; width: 28.8%; height: 20.8%; }
-  #uw-play { left: 54.5%; top: 71.2%; width: 30.4%; height: 20.8%; }
+  .uwp-btn:active { transform: scale(0.92); }
+  .uwp-btn img { width: 100%; height: auto; display: block; }
+  #uw-home { left: 27%; top: 74%; }
+  #uw-play { left: 51%; top: 74%; }
 
   /* ---------- deck (3D boat view) ----------
      The original mid-run surfacing screen. The painted home screen is the
@@ -383,6 +399,54 @@
   }
   #load-label[data-ready="true"] { opacity: 1; animation: throb 1.4s infinite; }
 
+  /* ---------- buttons ----------
+     Rebuilt from the artwork rather than shipped as images: they scale to any
+     size without resampling, and the label is real text, so it can change and
+     it stays crisp. Everything is sized in em off the button's font-size, so a
+     single font-size drives the whole control.
+     Colours sampled from the delivered art. */
+  .btn {
+    position: relative; display: inline-flex; align-items: center; justify-content: center;
+    gap: 0.42em; box-sizing: border-box;
+    padding: 0.58em 1.25em 0.62em; border-radius: 999px;
+    font-family: 'Arial Black', 'Helvetica Neue', Impact, var(--ui);
+    font-weight: 900; font-size: 1em; line-height: 1;
+    letter-spacing: 0.03em; text-transform: uppercase; white-space: nowrap;
+    color: #ffffff; pointer-events: auto; cursor: pointer;
+    transition: transform 0.07s ease, filter 0.12s ease;
+  }
+  .btn > svg { width: 1.05em; height: 1.05em; flex: none; }
+  .btn:active { transform: translateY(0.06em) scale(0.975); }
+  .btn:disabled { filter: grayscale(0.65) brightness(0.9); opacity: 0.6; cursor: default; }
+  .btn:disabled:active { transform: none; }
+
+  .btn--green {
+    background: linear-gradient(180deg, #c4e467 0%, #92d744 24%, #7ac335 56%, #86d02b 100%);
+    border: 0.085em solid #d9ef92;
+    box-shadow:
+      inset 0 0.12em 0 rgba(255,255,255,0.5),
+      inset 0 -0.2em 0 rgba(30,80,10,0.16),
+      0 0.17em 0 #558e2b,
+      0 0.34em 0.5em rgba(20,60,10,0.34);
+    text-shadow: 0 0.055em 0 rgba(48,96,22,0.55);
+    -webkit-text-stroke: 0.055em #5b9c26;
+    paint-order: stroke fill;
+  }
+  .btn--gold {
+    background: linear-gradient(180deg, #f2d64a 0%, #dbb100 26%, #bb7511 62%, #c8891a 100%);
+    border: 0.085em solid #f6e389;
+    box-shadow:
+      inset 0 0.12em 0 rgba(255,255,255,0.45),
+      inset 0 -0.2em 0 rgba(90,50,0,0.2),
+      0 0.15em 0 #8c5c05,
+      0 0.3em 0.45em rgba(70,45,0,0.34);
+    text-shadow: 0 0.055em 0 rgba(110,66,4,0.55);
+    -webkit-text-stroke: 0.05em #9a6708;
+    paint-order: stroke fill;
+  }
+  /* the oval PLAY on the settings sheet sits lower and wider than the pills */
+  .btn--oval { padding: 0.6em 1.7em 0.64em; border-radius: 999px; }
+
   /* ---------- start screen ----------
      The harbour scene full-bleed, the boat sprite on top of it, and two
      controls: the gear, and START. */
@@ -408,14 +472,19 @@
     width: 9%; max-width: 46px; pointer-events: auto; line-height: 0;
   }
   .ss-start {
-    position: absolute; left: 50%; top: 68.5%; width: 46%;
-    transform: translateX(-50%); pointer-events: auto; line-height: 0;
-    transition: transform 0.08s ease;
+    position: absolute; left: 50%; top: 68.5%; transform: translateX(-50%);
+    min-width: 46%; font-size: clamp(16px, 5.6vw, 27px);
   }
-  .ss-start:active { transform: translateX(-50%) scale(0.955); }
-  .ss-gear img, .ss-start img { width: 100%; height: auto; display: block; }
-  .ss-gear img { filter: drop-shadow(0 2px 5px rgba(6,45,70,0.45)); }
-  .ss-start img { filter: drop-shadow(0 5px 10px rgba(6,45,70,0.32)); }
+  .ss-start:active { transform: translateX(-50%) translateY(0.06em) scale(0.975); }
+  /* Offered only once there is more than one dive to choose between. */
+  .ss-levels {
+    position: absolute; left: 50%; top: 78.5%; transform: translateX(-50%);
+    min-width: 34%; font-size: clamp(13px, 4.4vw, 21px);
+  }
+  .ss-levels[hidden] { display: none; }
+  .ss-levels:active { transform: translateX(-50%) translateY(0.06em) scale(0.975); }
+  .ss-gear img { width: 100%; height: auto; display: block;
+                 filter: drop-shadow(0 2px 5px rgba(6,45,70,0.45)); }
 
   /* still used by the level-select and end screens */
   .menu-btn {
@@ -425,73 +494,176 @@
   }
   .menu-btn.primary { background: var(--ok); color: var(--abyss); border-color: transparent; }
 
-  /* ---------- level select ---------- */
-  #screen-levels { display: none; overflow-y: auto; touch-action: pan-y; -webkit-overflow-scrolling: touch; }
+  /* ---------- level select ----------
+     Same system as the rest: painted harbour behind, pale cards over it, real
+     text throughout, CSS chips and buttons. */
+  #screen-levels {
+    display: none; padding: 0; overflow: hidden; background: #4bb4e6;
+  }
   #screen-levels[data-on="true"] { display: block; }
-  #levels-head { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
-  #levels-head h2 { font-size: 15px; letter-spacing: 0.16em; text-transform: uppercase; font-weight: 650; }
+  #lv-bg { position: absolute; inset: 0; width: 100%; height: 100%;
+           object-fit: cover; object-position: left center; }
+  #lv-bg + .scrim { position: absolute; inset: 0; background: rgba(6,50,90,0.42); }
+  #lv-scroll {
+    position: absolute; inset: 0; overflow-y: auto; touch-action: pan-y;
+    -webkit-overflow-scrolling: touch;
+    padding: calc(var(--safe-t) + 14px) 5% calc(var(--safe-b) + 22px);
+  }
+  #levels-head {
+    display: flex; align-items: center; gap: 12px;
+    margin: 0 auto 16px; max-width: var(--ui-max);
+  }
+  #levels-head h2 {
+    font-family: 'Arial Black', Impact, var(--ui); font-weight: 900;
+    font-size: clamp(17px, 5.4vw, 26px); letter-spacing: 0.03em; color: #fff;
+    -webkit-text-stroke: 0.11em #10456f; paint-order: stroke fill;
+  }
   #btn-levels-back {
-    width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center; flex: none;
-    border: 1px solid var(--stroke); background: var(--chip); font-size: 16px; line-height: 1;
+    width: 2.2em; height: 2.2em; flex: none; border-radius: 50%;
+    display: grid; place-items: center; font-size: clamp(14px, 4.4vw, 20px);
+    color: #10456f; background: rgba(255,255,255,0.92);
+    box-shadow: 0 2px 5px rgba(4,40,70,0.35);
   }
-  .biome { margin-bottom: 26px; }
+  #btn-levels-back:active { transform: scale(0.93); }
+  #levels-list { max-width: var(--ui-max); margin: 0 auto; }
+
+  .biome { margin-bottom: 20px; }
   .biome-head { display: flex; align-items: baseline; gap: 8px; }
-  .biome h3 { font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--foam); }
-  .biome .count { font-size: 10px; color: var(--muted); }
-  .biome p.blurb { font-size: 11.5px; color: var(--muted); margin: 5px 0 12px; line-height: 1.45; }
+  .biome h3 {
+    font-family: 'Arial Black', Impact, var(--ui); font-weight: 900;
+    font-size: clamp(12px, 3.8vw, 17px); letter-spacing: 0.04em; color: #ffe08a;
+    -webkit-text-stroke: 0.1em #10456f; paint-order: stroke fill;
+  }
+  .biome .count { font-size: clamp(10px, 3vw, 13px); font-weight: 800; color: #d8f0ff; }
+  .biome p.blurb {
+    font-size: clamp(10px, 3.1vw, 13px); color: #e8f6ff; font-weight: 600;
+    margin: 4px 0 10px; line-height: 1.4; text-shadow: 0 1px 2px rgba(4,40,70,0.5);
+  }
 
+  /* A dive card in the same blue as the alert and the briefing, built the way
+     the buttons are: white rim, inset top highlight, solid bottom lip, soft
+     drop shadow. Cleared, open and locked read as three materials. */
   .lvl {
-    width: 100%; text-align: left; display: grid;
-    grid-template-columns: 30px 1fr auto; gap: 12px; align-items: start;
-    padding: 13px 14px; margin-bottom: 9px;
-    border-radius: 15px; border: 1px solid var(--stroke); background: var(--chip);
+    position: relative; width: 100%; text-align: left; display: grid;
+    grid-template-columns: 2.7em 1fr; gap: 4%; align-items: start;
+    padding: 4.4% 4.5% 4.6% 5%; margin-bottom: 13px;
+    border-radius: 20px; border: 0.16em solid rgba(255,255,255,0.9);
+    background: linear-gradient(180deg, #2b4ab2 0%, #23409c 55%, #1d3789 100%);
+    box-shadow:
+      inset 0 0.16em 0 rgba(255,255,255,0.22),
+      inset 0 -0.3em 0 rgba(6,20,70,0.28),
+      0 0.22em 0 #16296b,
+      0 0.5em 0.9em rgba(4,25,60,0.4);
+    font-size: clamp(11px, 3.4vw, 15px);
+    color: #dbe8ff;
+    transition: transform 0.08s ease, box-shadow 0.12s ease;
   }
-  .lvl .idx { font-size: 14px; font-weight: 700; color: var(--foam); text-align: center; padding-top: 1px; }
-  .lvl .top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-  .lvl .name { font-size: 14.5px; font-weight: 640; letter-spacing: -0.01em; }
-  .lvl .job {
-    font-size: 8.5px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase;
-    padding: 3px 7px; border-radius: 5px; line-height: 1;
-    color: var(--abyss); background: var(--signal);
+  .lvl::before {
+    content: ""; position: absolute; left: -0.02em; top: 12%; bottom: 12%; width: 0.42em;
+    border-radius: 999px; background: #ffb92e;
+    box-shadow: inset 0 0.1em 0 rgba(255,255,255,0.5);
   }
-  .lvl .job[data-job="salvage"] { background: var(--signal); }
-  .lvl .job[data-job="beacon"]  { background: #6fd8ff; }
-  .lvl .job[data-job="haul"]    { background: #d8a05a; }
-  .lvl .brief { font-size: 11px; color: var(--muted); margin-top: 5px; line-height: 1.45; }
-  .lvl .trains {
-    display: flex; align-items: baseline; gap: 6px; margin-top: 7px;
-    font-size: 10px; line-height: 1.4;
+  .lvl[data-job="beacon"]::before { background: #45b6ee; }
+  .lvl[data-job="haul"]::before   { background: #e09447; }
+  .lvl:not([data-locked="true"]):active {
+    transform: translateY(0.14em);
+    box-shadow:
+      inset 0 0.16em 0 rgba(255,255,255,0.22),
+      inset 0 -0.3em 0 rgba(6,20,70,0.28),
+      0 0.08em 0 #16296b,
+      0 0.2em 0.5em rgba(4,25,60,0.36);
   }
-  .lvl .trains .lab { color: var(--muted); letter-spacing: 0.1em; text-transform: uppercase; font-size: 8.5px; }
-  .lvl .trains .skill { color: var(--foam); font-weight: 620; }
-  .lvl .stats { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
-  .lvl .stats span {
-    font-size: 9px; letter-spacing: 0.04em; color: var(--muted);
-    border: 1px solid rgba(127,212,217,0.16); border-radius: 5px; padding: 2.5px 6px;
-  }
-  .lvl .stats span b { color: var(--ink); font-weight: 620; }
-  .lvl .stats span.foe b { color: var(--danger); }
-  .lvl .score { font-size: 12px; color: var(--ok); font-weight: 700; white-space: nowrap; padding-top: 1px; }
-  .lvl[data-locked="true"] { opacity: 0.4; }
-  .lvl[data-cleared="true"] { border-color: rgba(53,214,196,0.4); background: rgba(53,214,196,0.06); }
-  .lvl[data-cleared="true"] .idx { color: var(--ok); }
 
-  /* ---------- intro video ----------
-     The clip is 16:9 landscape against a portrait screen, so it is letterboxed
-     rather than cropped — cover would throw away most of each frame. */
+  .lvl .node {
+    grid-row: 1 / span 4; width: 2.7em; height: 2.7em; border-radius: 50%;
+    display: grid; place-items: center; font-weight: 900; font-size: 1em;
+    color: #fff; border: 0.14em solid rgba(255,255,255,0.92);
+    background: linear-gradient(180deg, #63b6dc 0%, #2f7fa8 100%);
+    box-shadow: inset 0 0.18em 0 rgba(255,255,255,0.4),
+                inset 0 -0.2em 0 rgba(0,0,0,0.2),
+                0 0.14em 0.28em rgba(4,25,60,0.4);
+    text-shadow: 0 0.06em 0.1em rgba(6,25,66,0.55);
+  }
+  .lvl[data-cleared="true"] .node { background: linear-gradient(180deg, #7ceb92 0%, #2fb551 100%); }
+  .lvl[data-locked="true"]  .node { background: linear-gradient(180deg, #9fb0c6 0%, #6d7f9a 100%); }
+
+  /* Shared by the picker card and the briefing overlay. */
+  .job {
+    font-size: 0.64em; font-weight: 900; letter-spacing: 0.1em; text-transform: uppercase;
+    padding: 0.34em 0.6em; border-radius: 0.5em; line-height: 1; white-space: nowrap;
+    color: #4a2f00; background: #ffc247;
+    box-shadow: inset 0 -0.16em 0 rgba(0,0,0,0.12);
+  }
+  .job[data-job="beacon"] { background: #8fd9ff; color: #0d3f5e; }
+  .job[data-job="haul"]   { background: #e0a75f; }
+  .lb-top .job { font-size: 0.68em; }
+
+  .lvl .head { display: flex; align-items: center; gap: 0.5em; flex-wrap: wrap; }
+  .lvl .name {
+    font-family: 'Arial Black', Impact, var(--ui); font-weight: 900;
+    font-size: 1.18em; color: #ffffff; letter-spacing: 0.005em; line-height: 1.1;
+    text-shadow: 0 2px 3px rgba(8,20,70,0.45);
+  }
+  .lvl .score { margin-left: auto; font-size: 0.86em; color: #7df0a4; font-weight: 900; white-space: nowrap; }
+  .lvl .score i { font-style: normal; font-size: 0.76em; color: #8fb4ff; margin-right: 0.3em; }
+
+  .lvl .rating { display: block; margin-top: 0.4em; }
+  .lvl .brief { display: block; font-size: 0.85em; color: #cfe0ff; font-weight: 700; margin-top: 0.4em;
+                line-height: 1.42; text-shadow: 0 1px 2px rgba(8,20,70,0.4); }
+  .lvl .trains {
+    display: inline-flex; align-items: baseline; gap: 0.4em; margin-top: 0.55em;
+    padding: 0.34em 0.62em; border-radius: 0.6em;
+    background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.2);
+  }
+  .lvl .trains .lab { color: #8fb4ff; letter-spacing: 0.09em; text-transform: uppercase; font-size: 0.66em; font-weight: 900; }
+  .lvl .trains .skill { color: #ffffff; font-weight: 900; font-size: 0.8em; }
+  .lvl .stats { display: flex; flex-wrap: wrap; gap: 0.34em; margin-top: 0.6em; }
+  .lvl .stats span {
+    font-size: 0.7em; color: #cfe0ff; font-weight: 700;
+    background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.18);
+    border-radius: 0.45em; padding: 0.26em 0.5em;
+  }
+  .lvl .stats span b { color: #ffffff; font-weight: 900; }
+  .lvl .stats span.foe b { color: #ff9a90; }
+
+  .lvl[data-locked="true"] {
+    border-color: rgba(255,255,255,0.55);
+    background: linear-gradient(180deg, #4a5f86 0%, #3d5074 55%, #354566 100%);
+    box-shadow: inset 0 0.16em 0 rgba(255,255,255,0.14), 0 0.16em 0 #2a3651,
+                0 0.3em 0.6em rgba(4,25,60,0.3);
+  }
+  .lvl[data-locked="true"]::before { background: #8fa0b8; }
+  .lvl[data-locked="true"] .name { color: #c6d4e8; }
+  .lvl[data-locked="true"] .job { background: #97a8bf; color: #33415c; }
+  .lvl[data-locked="true"] .brief,
+  .lvl[data-locked="true"] .trains,
+  .lvl[data-locked="true"] .stats { opacity: 0.6; }
+
+  /* ---------- stars ---------- */
+  .stars { display: inline-flex; gap: 0.18em; }
+  .star { width: 1.15em; height: 1.15em; flex: none; }
+  .star path { fill: rgba(255,255,255,0.22); stroke: rgba(255,255,255,0.75); stroke-width: 1.4; stroke-linejoin: round; }
+  .star[data-on="true"] path { fill: #ffc022; stroke: #ffffff; }
+  .lvl[data-locked="true"] .star path { fill: rgba(255,255,255,0.16); }
+  /* the end screen shows a bigger row, and only on a win */
+  #end-stars { position: absolute; left: 0; right: 0; top: 41.5%; text-align: center; font-size: clamp(15px, 5vw, 26px); }
+  #end-stars[hidden] { display: none; }
+  #end-stars .star { filter: drop-shadow(0 0.08em 0.12em rgba(60,40,10,0.35)); }
+
+    /* ---------- intro video ----------
+      Fill the portrait screen so the intro has no letterbox borders. */
   #screen-intro { display: none; padding: 0; background: #07304f; }
   #screen-intro[data-on="true"] { display: block; }
   #intro-video {
     position: absolute; inset: 0; width: 100%; height: 100%;
-    object-fit: contain; background: #07304f;
+    object-fit: cover; background: #07304f;
   }
   #btn-intro-skip {
-    position: absolute; right: 18px; bottom: calc(var(--safe-b) + 26px);
-    padding: 11px 22px; border-radius: 999px;
-    background: rgba(4,26,44,0.6); border: 1px solid rgba(255,255,255,0.35); color: #fff;
-    font-size: 11px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase;
-    backdrop-filter: blur(4px);
+    position: absolute; left: 50%; bottom: calc(var(--safe-b) + 34px);
+    transform: translateX(-50%); min-width: 46%;
+    font-size: clamp(15px, 5.2vw, 25px);
   }
+  #btn-intro-skip:active { transform: translateX(-50%) translateY(0.06em) scale(0.975); }
 
   /* ---------- harbour scene ----------
      Shared by the briefing and the home screen: same painted backdrop, same
@@ -572,24 +744,103 @@
     position: absolute; left: 0; right: 0; top: 68.5%;
     display: flex; justify-content: center; gap: 4%; pointer-events: none;
   }
-  .hs-btn {
-    position: relative; width: 45%; max-width: 232px;
-    pointer-events: auto; line-height: 0; transition: transform 0.08s ease;
-  }
-  .hs-btn:active { transform: scale(0.96); }
-  .hs-btn img { width: 100%; height: auto; display: block;
-                filter: drop-shadow(0 5px 10px rgba(6,45,70,0.32)); }
+  .hs-btn { min-width: 45%; max-width: 232px; font-size: clamp(16px, 5.6vw, 27px); }
 
+  /* Rebuilt from the artwork so the copy is real text. The two bands live in one
+     clipped card, so the shadow traces a single rounded rectangle instead of
+     following the silhouette of two stacked boxes — which is what made the old
+     filter: drop-shadow look hard-edged at the seam. */
   .al-popup { position: absolute; left: 7%; right: 7%; top: 13.5%; }
-  .al-popup > img { width: 100%; height: auto; display: block;
-                    filter: drop-shadow(0 8px 18px rgba(4,40,70,0.35)); }
-  .al-ok {
-    position: absolute; right: 6%; top: calc(100% + 6px); width: 17%;
-    pointer-events: auto; line-height: 0; transition: transform 0.08s ease;
+  .al-card {
+    border-radius: 18px; overflow: hidden;
+    box-shadow:
+      0 1px 2px rgba(4,30,60,0.16),
+      0 6px 14px rgba(4,30,60,0.26),
+      0 16px 34px rgba(4,30,60,0.28),
+      0 30px 60px rgba(4,30,60,0.18);
   }
-  .al-ok:active { transform: scale(0.94); }
-  .al-ok img { width: 100%; height: auto; display: block;
-               filter: drop-shadow(0 3px 7px rgba(4,40,70,0.4)); }
+  .al-head {
+    background: linear-gradient(180deg, #ef4136 0%, #e6332a 55%, #cf2a21 100%);
+    color: #fff; text-align: center;
+    padding: 0.55em 0.6em 0.6em;
+    font-family: 'Arial Black', Impact, var(--ui); font-weight: 900;
+    font-size: clamp(15px, 5vw, 24px); letter-spacing: 0.04em;
+    text-shadow: 0 2px 3px rgba(90,10,5,0.45);
+    box-shadow: inset 0 -0.12em 0 rgba(120,20,12,0.35);
+  }
+  .al-body {
+    background: linear-gradient(180deg, #213992 0%, #2b4ab2 100%);
+    color: #dbe8ff; text-align: center;
+    padding: 1em 1.1em 1.1em;
+    font-size: clamp(12px, 3.9vw, 18px); font-weight: 800; line-height: 1.45;
+    text-shadow: 0 1px 2px rgba(8,20,70,0.55);
+  }
+  .al-ok { position: absolute; right: 5%; top: calc(100% + 8px);
+           font-size: clamp(11px, 3.5vw, 16px); }
+
+  /* ---------- level briefing ----------
+     The alert box's panel without its red header: same blue body, same rim and
+     shadow, so the two read as one family. Shown on Dive, and it counts itself
+     out rather than waiting on a tap. */
+  #modal-brief { position: fixed; inset: 0; display: none; z-index: 65; }
+  #modal-brief[data-on="true"] { display: block; }
+  #modal-brief .scrim { position: absolute; inset: 0; background: rgba(6,45,85,0.5); }
+  .lb-card {
+    position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+    width: 84%; max-width: 370px;
+    background: linear-gradient(180deg, #213992 0%, #2b4ab2 100%);
+    border-radius: 18px; padding: 6% 6% 5.5%;
+    box-shadow:
+      0 1px 2px rgba(4,30,60,0.16),
+      0 6px 14px rgba(4,30,60,0.26),
+      0 16px 34px rgba(4,30,60,0.28),
+      0 30px 60px rgba(4,30,60,0.18);
+    font-size: clamp(11px, 3.5vw, 16px);
+    color: #dbe8ff;
+  }
+  .lb-eyebrow {
+    font-size: 0.76em; font-weight: 900; letter-spacing: 0.1em; text-transform: uppercase;
+    color: #8fb4ff;
+  }
+  .lb-top { display: flex; align-items: center; gap: 0.55em; flex-wrap: wrap; margin-top: 0.3em; }
+  .lb-name {
+    font-family: 'Arial Black', Impact, var(--ui); font-weight: 900;
+    font-size: 1.5em; color: #ffffff; letter-spacing: 0.01em; line-height: 1.05;
+    text-shadow: 0 2px 3px rgba(8,20,70,0.5);
+  }
+  .lb-brief { font-size: 0.9em; font-weight: 700; line-height: 1.45; margin-top: 0.6em;
+              text-shadow: 0 1px 2px rgba(8,20,70,0.45); }
+  .lb-trains {
+    margin-top: 0.85em; padding: 0.7em 0.8em; border-radius: 12px;
+    background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.2);
+  }
+  .lb-trains .lab {
+    font-size: 0.7em; font-weight: 900; letter-spacing: 0.1em; text-transform: uppercase;
+    color: #8fb4ff;
+  }
+  .lb-trains .skill { font-size: 0.95em; font-weight: 900; color: #ffffff; margin-left: 0.4em; }
+  .lb-trains p { font-size: 0.82em; font-weight: 700; line-height: 1.4; margin-top: 0.3em; }
+  .lb-card .stats { display: flex; flex-wrap: wrap; gap: 0.35em; margin-top: 0.85em; }
+  .lb-card .stats span {
+    font-size: 0.72em; font-weight: 700; color: #cfe0ff;
+    background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.18);
+    border-radius: 0.45em; padding: 0.3em 0.55em;
+  }
+  .lb-card .stats span b { color: #ffffff; font-weight: 900; }
+  .lb-card .stats span.foe b { color: #ff9a90; }
+
+  /* The countdown replaces the CTA: it starts on its own. */
+  #lb-countdown {
+    margin-top: 1.1em; padding-top: 0.9em; text-align: center;
+    border-top: 1px solid rgba(255,255,255,0.18);
+    font-size: 0.92em; font-weight: 800; color: #cfe0ff;
+  }
+  #lb-count {
+    display: inline-block; min-width: 1.5em;
+    font-family: 'Arial Black', Impact, var(--ui); font-weight: 900;
+    font-size: 1.45em; color: #ffffff; line-height: 1;
+    text-shadow: 0 2px 3px rgba(8,20,70,0.5);
+  }
 
   /* ---------- how-to-play ----------
      The whole scroll ships as one image, close button included, so the only
@@ -602,10 +853,28 @@
     position: absolute; left: 50%; top: 19.5%; transform: translateX(-50%);
     width: 84%; max-width: 430px;
   }
-  .hp-wrap > img {
+  .hp-wrap > .hp-scroll {
     width: 100%; height: auto; display: block;
     filter: drop-shadow(0 12px 26px rgba(4,40,70,0.32));
   }
+  /* Real copy on a blanked scroll, so the wording can change and stays crisp.
+     The four illustrations are still art — they carry no text. */
+  .hp-list {
+    position: absolute; left: 9%; right: 6%; top: 13.5%; bottom: 8%;
+    display: flex; flex-direction: column; justify-content: space-evenly;
+  }
+  .hp-item { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 4%; }
+  .hp-item h3 {
+    font-family: 'Arial Black', Impact, var(--ui); font-weight: 900;
+    font-size: clamp(14px, 4.9vw, 24px); letter-spacing: 0.02em;
+    color: #33a6e8; -webkit-text-stroke: 0.1em #ffffff; paint-order: stroke fill;
+    margin-bottom: 0.12em;
+  }
+  .hp-item p {
+    font-size: clamp(11px, 3.7vw, 18px); font-weight: 800; line-height: 1.25;
+    color: #6b4a2a;
+  }
+  .hp-item img { width: clamp(38px, 15vw, 76px); height: auto; justify-self: center; }
   #btn-help-close {
     position: absolute; left: 82.5%; top: 1.5%; width: 16.5%; height: 11.5%;
     border-radius: 50%; background: none;
@@ -626,7 +895,15 @@
   }
   .sp-bg { width: 100%; height: auto; display: block;
            filter: drop-shadow(0 12px 26px rgba(4,40,70,0.38)); }
-  .sp-title { position: absolute; left: 22.5%; top: 6.6%; width: 55%; height: auto; }
+  /* Real text on the panel's banner rather than a keyed-out image of it. */
+  .sp-title, .uwp-title {
+    position: absolute; left: 8%; right: 8%; top: 4.4%; text-align: center;
+    font-family: 'Arial Black', Impact, var(--ui); font-weight: 900;
+    font-size: clamp(15px, 5vw, 25px); letter-spacing: 0.04em;
+    color: #ffffff; paint-order: stroke fill;
+  }
+  .sp-title { -webkit-text-stroke: 0.14em #5f9c22; }
+  .uwp-title { top: 5.6%; color: #7ecdf5; -webkit-text-stroke: 0.13em #ffffff; }
 
   .sp-r1 { top: 38.6%; }
   .sp-r2 { top: 64.4%; }
@@ -651,13 +928,11 @@
   .sp-toggle[data-on="false"] .sp-track { filter: grayscale(0.72) brightness(0.86); }
 
   .sp-play {
-    position: absolute; left: 25.3%; top: 92.1%; width: 49.4%;
-    transform: translateY(-50%); pointer-events: auto; line-height: 0;
-    transition: transform 0.08s ease;
+    position: absolute; left: 50%; top: 92.1%;
+    transform: translate(-50%, -50%); min-width: 50%;
+    font-size: clamp(12px, 3.9vw, 19px);
   }
-  .sp-play:active { transform: translateY(-50%) scale(0.95); }
-  .sp-play img { width: 100%; height: auto; display: block;
-                 filter: drop-shadow(0 4px 9px rgba(4,40,70,0.35)); }
+  .sp-play:active { transform: translate(-50%, -50%) scale(0.965); }
 
   /* ---------- game over / end ----------
      One blank scroll, derived from the shark screen with its content painted
@@ -705,16 +980,15 @@
   .go-row b { color: #12496a; font-weight: 800; white-space: nowrap; }
 
   #btn-again {
-    position: absolute; left: 33.6%; top: 66.8%; width: 38.5%;
-    pointer-events: auto; line-height: 0; transition: transform 0.08s ease;
+    position: absolute; left: 50%; top: 69.5%; transform: translateX(-50%);
+    min-width: 40%; font-size: clamp(15px, 5.2vw, 26px);
   }
-  #btn-again:active { transform: scale(0.95); }
-  #btn-again img { width: 100%; height: auto; display: block;
-                   filter: drop-shadow(0 4px 9px rgba(40,60,30,0.35)); }
+  #btn-again:active { transform: translateX(-50%) translateY(0.06em) scale(0.975); }
   #btn-end-levels {
     position: absolute; left: 50%; bottom: calc(var(--safe-b) + 20px);
-    transform: translateX(-50%); width: 190px; height: 42px;
+    transform: translateX(-50%); min-width: 44%; font-size: clamp(12px, 3.9vw, 18px);
   }
+  #btn-end-levels:active { transform: translateX(-50%) translateY(0.06em) scale(0.975); }
 
   /* ---------- game-over film ----------
      Fades up, plays, fades out, and only then is the scroll revealed. */
@@ -755,24 +1029,27 @@
   <button class="ss-gear" id="btn-menu-settings" aria-label="Settings">
     <img data-asset="setting light mode icon" data-scale="4" alt="">
   </button>
-  <button class="ss-start" id="btn-play">
-    <img data-asset="derived:start-button.webp" alt="Start">
-  </button>
+  <button class="ss-start btn btn--green" id="btn-play">Start</button>
+  <button class="ss-levels btn btn--gold" id="btn-levels" hidden>Levels</button>
 </section>
 
 <!-- ============ LEVEL SELECT ============ -->
-<section class="screen solid" id="screen-levels">
-  <div id="levels-head" class="col">
-    <button id="btn-levels-back" aria-label="Back">&#8592;</button>
-    <h2>Select dive</h2>
+<section class="screen" id="screen-levels">
+  <img id="lv-bg" data-asset="go bg" data-scale="2" alt="" aria-hidden="true">
+  <div class="scrim"></div>
+  <div id="lv-scroll">
+    <div id="levels-head">
+      <button id="btn-levels-back" aria-label="Back">&#8592;</button>
+      <h2>Select Dive</h2>
+    </div>
+    <div id="levels-list"></div>
   </div>
-  <div id="levels-list" class="col"></div>
 </section>
 
 <!-- ============ INTRO VIDEO ============ -->
 <section class="screen" id="screen-intro">
   <video id="intro-video" playsinline webkit-playsinline preload="none"></video>
-  <button id="btn-intro-skip">Skip</button>
+  <button class="btn btn--green" id="btn-intro-skip">Continue</button>
 </section>
 
 <!-- ============ ALERT / BRIEFING ============ -->
@@ -788,11 +1065,12 @@
     <img data-asset="checklist_icon" data-scale="4" alt="">
   </button>
   <div class="al-popup">
-    <img data-asset="ALERT POPUP" data-scale="4"
-         alt="Alert. The storm returns in 8 minutes. Find the missing parts. Repair your boat. Escape.">
-    <button class="al-ok" id="btn-alert-ok">
-      <img data-asset="OKAY BUTTON" data-scale="4" alt="Okay">
-    </button>
+    <div class="al-card">
+      <div class="al-head">ALERT!!</div>
+      <div class="al-body">The storm returns in 8 minutes.<br>
+        Find the missing parts. Repair your boat. Escape.</div>
+    </div>
+    <button class="al-ok btn btn--gold" id="btn-alert-ok">Okay</button>
   </div>
 </section>
 
@@ -824,9 +1102,7 @@
   <!-- Pre-dive only: nothing has been recovered yet, so there is nothing to
        fit. Repair lives on the deck screen you surface onto. -->
   <div class="hs-actions">
-    <button class="hs-btn" id="btn-dive">
-      <img data-asset="dive button" data-scale="4" alt="Dive">
-    </button>
+    <button class="hs-btn btn btn--green" id="btn-dive">Dive</button>
   </div>
 </section>
 
@@ -883,8 +1159,8 @@
   </button>
 
   <div class="uw-prog">
-    <img data-asset="boat progress" data-scale="4" alt="Boat progress">
     <span id="ship-fill"></span>
+    <span class="uw-prog-label">BOAT PROGRESS..</span>
   </div>
 
   <div class="uw-timer" id="hud-timer" data-late="false"><span id="timer-value">8:00</span></div>
@@ -919,7 +1195,10 @@
 <div id="modal-uw-settings">
   <div class="scrim"></div>
   <div class="uwp-panel">
-    <img class="uwp-bg" data-asset="setting popup 2" data-scale="4" alt="Settings">
+    <img class="uwp-bg" data-asset="derived:uw-panel.webp" alt="" aria-hidden="true">
+    <div class="uwp-title">Settings</div>
+    <img class="uwp-icon uwp-r1" data-asset="UNDERWATER SPEAKER ICON" data-scale="4" alt="" aria-hidden="true">
+    <img class="uwp-icon uwp-r2" data-asset="UNDERWATER MUSIC ICON" data-scale="4" alt="" aria-hidden="true">
     <button class="uwp-toggle uwp-r1" id="tg-uw-sfx" data-on="true" aria-label="Sound">
       <img class="tr" data-asset="derived:uw-toggle-track.webp" alt="">
       <img class="kn" data-asset="derived:uw-toggle-knob.webp" alt="">
@@ -928,8 +1207,29 @@
       <img class="tr" data-asset="derived:uw-toggle-track.webp" alt="">
       <img class="kn" data-asset="derived:uw-toggle-knob.webp" alt="">
     </button>
-    <button class="uwp-hit" id="uw-home" aria-label="Surface and abandon the dive"></button>
-    <button class="uwp-hit" id="uw-play" aria-label="Resume"></button>
+    <button class="uwp-btn" id="uw-home" aria-label="Surface and abandon the dive">
+      <img data-asset="UW HOME ICON" data-scale="4" alt=""></button>
+    <button class="uwp-btn" id="uw-play" aria-label="Resume">
+      <img data-asset="UW PLAY ICON" data-scale="4" alt=""></button>
+  </div>
+</div>
+
+<!-- ============ LEVEL BRIEFING ============ -->
+<div id="modal-brief">
+  <div class="scrim"></div>
+  <div class="lb-card">
+    <div class="lb-eyebrow" id="lb-eyebrow"></div>
+    <div class="lb-top">
+      <span class="lb-name" id="lb-name"></span>
+      <span class="job" id="lb-job"></span>
+    </div>
+    <p class="lb-brief" id="lb-brief"></p>
+    <div class="lb-trains" id="lb-trains">
+      <span class="lab">Trains</span><span class="skill" id="lb-skill"></span>
+      <p id="lb-tbrief"></p>
+    </div>
+    <div class="stats" id="lb-stats"></div>
+    <div id="lb-countdown">The game is starting in <span id="lb-count">5</span></div>
   </div>
 </div>
 
@@ -937,11 +1237,25 @@
 <div id="modal-help">
   <div class="scrim"></div>
   <div class="hp-wrap">
-    <img data-asset="POPUP ? FINAL (USE THIS)" data-scale="2"
-         alt="How to play. Dive: explore the ocean before the storm arrives.
-              Collect: find missing boat parts to repair the boat.
-              Escape: repair your boat and sail safely to the shore.
-              Oxygen: keep an eye on the oxygen bar.">
+    <img class="hp-scroll" data-asset="derived:help-scroll.webp" alt="" aria-hidden="true">
+    <div class="hp-list">
+      <div class="hp-item">
+        <div><h3>Dive</h3><p>Explore the ocean before storm arrives.</p></div>
+        <img data-asset="? POP UP DIVER" data-scale="4" alt="" aria-hidden="true">
+      </div>
+      <div class="hp-item">
+        <div><h3>Collect</h3><p>Find missing boat parts to repair the boat.</p></div>
+        <img data-asset="object 1" data-scale="4" alt="" aria-hidden="true">
+      </div>
+      <div class="hp-item">
+        <div><h3>Escape</h3><p>Repair your boat and sail safely to the shore.</p></div>
+        <img data-asset="BOAT POPUP (?)" data-scale="4" alt="" aria-hidden="true">
+      </div>
+      <div class="hp-item">
+        <div><h3>Oxygen</h3><p>Keep an eye on the oxygen bar.</p></div>
+        <img data-asset="object 5" data-scale="4" alt="" aria-hidden="true">
+      </div>
+    </div>
     <button id="btn-help-close" aria-label="Close"></button>
   </div>
 </div>
@@ -951,7 +1265,7 @@
   <div class="scrim"></div>
   <div class="sp-panel">
     <img class="sp-bg" data-asset="background of setting popup" data-scale="4" alt="" aria-hidden="true">
-    <img class="sp-title" data-asset="derived:settings-title.webp" alt="Settings">
+    <div class="sp-title">Settings</div>
 
     <img class="sp-icon sp-r1" data-asset="speaker button" data-scale="4" alt="" aria-hidden="true">
     <button class="sp-toggle sp-r1" id="tg-sfx" data-on="true" aria-label="Sound">
@@ -965,9 +1279,7 @@
       <img class="sp-knob" data-asset="derived:toggle-knob.webp" alt="">
     </button>
 
-    <button class="sp-play" id="btn-resume">
-      <img data-asset="play button" data-scale="4" alt="Play">
-    </button>
+    <button class="sp-play btn btn--green btn--oval" id="btn-resume">Play</button>
   </div>
 </div>
 
@@ -982,13 +1294,18 @@
   <img id="end-icon" alt="">
   <div id="end-title">GAME OVER</div>
   <div id="end-reason"></div>
+  <div id="end-stars" hidden></div>
   <div id="end-card">
     <div class="go-row"><span>Depth Reached</span><b id="end-depth">0 m</b></div>
     <div class="go-row"><span>Parts Collected</span><b id="end-parts">0/0</b></div>
     <div class="go-row"><span>Time Survived</span><b id="end-time">00:00</b></div>
   </div>
-  <button id="btn-again"><img data-asset="RETRY BUTTON" data-scale="4" alt="Retry"></button>
-  <button class="menu-btn" id="btn-end-levels">Select dive</button>
+  <button class="btn btn--green" id="btn-again">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2"
+         stroke-linecap="round" aria-hidden="true">
+      <path d="M20 12a8 8 0 1 1-2.4-5.7"/><path d="M20 3.4V9h-5.6"/>
+    </svg>Retry</button>
+  <button class="btn btn--gold" id="btn-end-levels">Select Dive</button>
 </section>
 
 <script type="module" src="./src/main.js"></script>
